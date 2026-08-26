@@ -193,6 +193,7 @@ public partial class SettingsViewModel : ObservableObject
 
     // ── Translation ───────────────────────────────────────────────────────
     public record TranslateServiceOption(string Value, string Display);
+    public record TargetLanguageOption(string Code, string Display);
 
     public static IReadOnlyList<TranslateServiceOption> TranslateServiceOptions { get; } =
     [
@@ -210,7 +211,31 @@ public partial class SettingsViewModel : ObservableObject
         new("yandex",           "Yandex (free)"),
     ];
 
+    public ObservableCollection<TargetLanguageOption> TargetLanguageOptions { get; } =
+    [
+        new("ar",      "Arabic"),
+        new("pt-BR",   "Brazilian Portuguese"),
+        new("nl",      "Dutch"),
+        new("en",      "English"),
+        new("fr",      "French"),
+        new("de",      "German"),
+        new("it",      "Italian"),
+        new("ja",      "Japanese"),
+        new("ko",      "Korean"),
+        new("pl",      "Polish"),
+        new("pt-PT",   "European Portuguese"),
+        new("ru",      "Russian"),
+        new("zh-Hans", "Simplified Chinese"),
+        new("es",      "Spanish"),
+        new("zh-Hant", "Traditional Chinese"),
+        new("tr",      "Turkish"),
+        new("uk",      "Ukrainian"),
+    ];
+
     [ObservableProperty] private TranslateServiceOption? _selectedTranslateService;
+    [ObservableProperty] private TargetLanguageOption? _selectedTargetLanguage;
+    [ObservableProperty] private bool _apiTranslationOverlay;
+    [ObservableProperty] private bool _googleFreeYandexFallback;
     [ObservableProperty] private string _translateKey      = "";
     [ObservableProperty] private string _chatGptModel     = "gpt-4o-mini";
     [ObservableProperty] private string _ollamaUrl         = "http://localhost:11434";
@@ -232,6 +257,9 @@ public partial class SettingsViewModel : ObservableObject
     public bool IsFreeService =>
         SelectedTranslateService?.Value is "googlefree" or "googletranslatepa" or "yandex";
 
+    public bool IsGoogleFreeService =>
+        SelectedTranslateService?.Value == "googlefree";
+
     public bool IsNoneService =>
         SelectedTranslateService?.Value == "none";
 
@@ -245,9 +273,26 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowChatGptModel));
         OnPropertyChanged(nameof(ShowLibreTranslateUrl));
         OnPropertyChanged(nameof(IsFreeService));
+        OnPropertyChanged(nameof(IsGoogleFreeService));
         OnPropertyChanged(nameof(IsNoneService));
         OnPropertyChanged(nameof(ShowValidateButton));
         OnPropertyChanged(nameof(CanValidate));
+    }
+
+    partial void OnSelectedTargetLanguageChanged(TargetLanguageOption? value)
+    {
+        if (value == null) return;
+        try { _cfg.SaveTargetLanguage(value.Code, value.Display); } catch { }
+    }
+
+    partial void OnApiTranslationOverlayChanged(bool value)
+    {
+        try { _cfg.SaveApiTranslationOverlay(value); } catch { }
+    }
+
+    partial void OnGoogleFreeYandexFallbackChanged(bool value)
+    {
+        try { _cfg.SaveGoogleFreeYandexFallback(value); } catch { }
     }
 
     // ── Theme ─────────────────────────────────────────────────────────────
@@ -625,6 +670,21 @@ public partial class SettingsViewModel : ObservableObject
         var savedService = config.Translation.TranslateService;
         _selectedTranslateService = TranslateServiceOptions.FirstOrDefault(o => o.Value == savedService)
                                     ?? TranslateServiceOptions.First(o => o.Value == "googlefree");
+        var savedTargetCode = LanguageCodes.Normalize(config.Translation.TargetLanguage);
+        var savedTarget = TargetLanguageOptions.FirstOrDefault(o =>
+            string.Equals(o.Code, savedTargetCode, StringComparison.OrdinalIgnoreCase));
+        if (savedTarget == null)
+        {
+            savedTarget = new TargetLanguageOption(
+                savedTargetCode,
+                string.IsNullOrWhiteSpace(config.Translation.TargetLanguageName)
+                    ? LanguageNames.DisplayName(savedTargetCode)
+                    : config.Translation.TargetLanguageName);
+            TargetLanguageOptions.Add(savedTarget);
+        }
+        _selectedTargetLanguage = savedTarget;
+        _apiTranslationOverlay = config.Translation.ApiTranslationOverlay;
+        _googleFreeYandexFallback = config.Translation.GoogleFreeYandexFallback;
         _translateKey       = config.Translation.TranslateKey;
         _chatGptModel      = config.Translation.ChatGptModel;
         _ollamaUrl          = config.Translation.OllamaUrl;
@@ -802,6 +862,10 @@ public partial class SettingsViewModel : ObservableObject
             OllamaUrl          = OllamaUrl,
             OllamaModel        = OllamaModel,
             LibreTranslateUrl  = LibreTranslateUrl,
+            TargetLanguage = SelectedTargetLanguage?.Code ?? LanguageCodes.Default,
+            TargetLanguageName = SelectedTargetLanguage?.Display ?? "English",
+            ApiTranslationOverlay = ApiTranslationOverlay,
+            GoogleFreeYandexFallback = GoogleFreeYandexFallback,
         };
         try { _cfg.Save(launcherCfg, translation); } catch { }
 
@@ -1462,17 +1526,13 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Persists the new order on drop. Order only affects which active pack is primary (it drives the
-    /// runtime translation language); it does NOT change the unpacked files, since conflicting outputs
+    /// Persists the new order on drop. It does not change the unpacked files, since conflicting outputs
     /// between active packs are rejected rather than overwritten — so no Game\mods rebuild is needed.
     /// </summary>
     public Task CommitLanguagePackOrderAsync()
     {
         SaveActiveLanguagePackSelection();
-        var top = LanguagePacks.FirstOrDefault(m => m.IsActive && m.CanActivate);
-        SetLanguagePackStatus(top != null
-            ? $"Reordered. {top.LanguageDisplay} is the primary translation language."
-            : ActiveSelectionStatus());
+        SetLanguagePackStatus("Language pack priority updated. The API target language is selected under General.");
         return Task.CompletedTask;
     }
 
@@ -1482,10 +1542,6 @@ public partial class SettingsViewModel : ObservableObject
         _savedActiveLanguagePacks.Clear();
         _savedActiveLanguagePacks.UnionWith(fileNames);
         _cfg.SaveActiveLanguagePacks(fileNames);
-
-        // The highest-priority active pack (top of the list) drives the runtime translation target.
-        var top = LanguagePacks.FirstOrDefault(m => m.IsActive && m.CanActivate);
-        try { _cfg.SaveTargetLanguage(top?.Language ?? "", top?.LanguageDisplay ?? ""); } catch { }
     }
 
     public Task SetDqxDir(string dir)

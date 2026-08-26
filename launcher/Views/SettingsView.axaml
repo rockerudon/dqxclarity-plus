@@ -159,6 +159,49 @@
                                               SelectionChanged="OnTranslateServiceChanged"
                                               ToolTip.Tip="Select the translation service to use for untranslated game text."/>
 
+                                    <!-- Shared target used by every translation provider -->
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Target language"
+                                                   Margin="0,0,10,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource AppMuted}"/>
+                                        <ComboBox Grid.Column="1"
+                                                  x:Name="TargetLanguageCombo"
+                                                  HorizontalAlignment="Stretch"
+                                                  IsEnabled="{Binding !IsNoneService}"
+                                                  SelectionChanged="OnTargetLanguageChanged"
+                                                  ToolTip.Tip="Language requested from the selected translation API. This is independent from the active DAT language packs."/>
+                                    </Grid>
+
+                                    <TextBlock IsVisible="{Binding !IsNoneService}"
+                                               Text="DQX reliably renders ASCII and native Japanese. Other scripts and accented characters are romanized automatically so dialogue remains visible."
+                                               FontSize="10"
+                                               Foreground="{DynamicResource AppMuted}"
+                                               TextWrapping="Wrap"/>
+
+                                    <CheckBox Content="API translation overlay"
+                                              IsChecked="{Binding ApiTranslationOverlay}"
+                                              IsEnabled="{Binding !IsNoneService}"
+                                              ToolTip.Tip="After language packs are applied, translate prose exposed by runtime hooks. Static UI and canonical names remain controlled by the active pack. Disabled by default."/>
+
+                                    <TextBlock IsVisible="{Binding ApiTranslationOverlay}"
+                                               Text="The API layer auto-detects English or Japanese source text. It affects supported dialogue, walkthrough and description fields; menus and wiki-compatible names keep the pack's translation."
+                                               FontSize="10"
+                                               Foreground="{DynamicResource AppMuted}"
+                                               TextWrapping="Wrap"/>
+
+                                    <CheckBox IsVisible="{Binding IsGoogleFreeService}"
+                                              Content="Use Yandex during Google Free cooldowns"
+                                              IsChecked="{Binding GoogleFreeYandexFallback}"
+                                              ToolTip.Tip="Optional continuity fallback. Only after Google Free returns HTTP 429, affected text is sent to Yandex until Google's cooldown ends. Google is then used again automatically. Disabled by default."/>
+
+                                    <TextBlock IsVisible="{Binding IsGoogleFreeService}"
+                                               Text="Optional: prevents long cutscenes from falling back to pack text during Google rate limits. Text received during the cooldown is sent to Yandex and cached normally."
+                                               FontSize="10"
+                                               Foreground="{DynamicResource AppMuted}"
+                                               TextWrapping="Wrap"/>
+
                                     <!-- None service info -->
                                     <TextBlock IsVisible="{Binding IsNoneService}"
                                                Text="No server-side text translation will be performed."

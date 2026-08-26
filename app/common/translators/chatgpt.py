@@ -3,14 +3,15 @@ from common.measure import measure_duration
 from loguru import logger as log
 
 
-def _system_prompt(lang: str) -> str:
+def _system_prompt(lang: str, source: str = "Japanese") -> str:
     return (
         "You are an expert translator and cultural localization specialist with deep knowledge of "
-        f"video game localization. Translate the following Dragon Quest X dialogue from Japanese to "
+        f"video game localization. Translate the following Dragon Quest X dialogue from {source} to "
         f"{lang}. Preserve the original tone, humor, personality, and emotional nuances. Adapt "
         f"idioms and cultural references to resonate naturally with native {lang} speakers while maintaining "
         "the fantasy RPG context. Maintain consistency in character voices and DQX-specific "
-        "terminology. Return only the translated text with no explanation or surrounding quotes."
+        "terminology. Preserve every angle-bracket game tag and placeholder exactly. "
+        "Return only the translated text with no explanation or surrounding quotes."
     )
 
 
@@ -20,7 +21,7 @@ class ChatGPTTranslate:
 
         cfg = UserConfig()
         self.model = cfg.chatgpt_model
-        self.system_prompt = _system_prompt(cfg.target_language_name)
+        self.system_prompt = _system_prompt(cfg.target_language_name, cfg.source_language_name)
         self.client = OpenAI(api_key=api_key)
 
     @measure_duration

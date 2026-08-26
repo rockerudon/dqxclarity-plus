@@ -53,6 +53,7 @@
 
     // Cache for translations to avoid blocking on subsequent calls
     const translationCache = new Map();
+    const translatedValues = new Set();
 
     Interceptor.attach(funcAddress, {
         onEnter: function(args) {
@@ -78,11 +79,15 @@
                     return;
                 }
 
+                if (translatedValues.has(originalText)) {
+                    return;
+                }
+
                 // Check cache first
                 if (translationCache.has(originalText)) {
-                    const cachedReplacement = translationCache.get(originalText);
-                    if (cachedReplacement && cachedReplacement !== originalText) {
-                        textPtr.writeUtf8String(cachedReplacement);
+                    const cached = translationCache.get(originalText);
+                    if (cached && cached.text !== originalText) {
+                        args[2] = cached.pointer;
                     }
                     return;
                 }
@@ -103,8 +108,12 @@
                 if (replacement) {
                     // Write replacement to memory if different
                     if (replacement !== originalText) {
-                        textPtr.writeUtf8String(replacement);
-                        translationCache.set(originalText, replacement);
+                        const replacementPtr = Memory.allocUtf8String(replacement);
+                        args[2] = replacementPtr;
+                        translatedValues.add(replacement);
+                        translationCache.set(originalText, {text: replacement, pointer: replacementPtr});
+                    } else {
+                        translationCache.set(originalText, null);
                     }
                 }
 

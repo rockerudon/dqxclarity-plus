@@ -1,7 +1,9 @@
 """Hooks walkthrough text replacements."""
 
 from common.db_ops import sql_read, sql_write
-from common.translate import Translator, is_text_japanese
+from common.language import prepare_game_text
+from common.translate import Translator, should_translate_text
+from common.translation_domains import PROSE_LAYOUTS, fit_prose_layout
 from loguru import logger as log
 
 
@@ -25,27 +27,40 @@ def walkthrough_replacement(original_text: str) -> str:
     :param original_text: The original text to replace.
     :return: Replacement text, or original if no replacement.
     """
-    # only process Japanese text
-    if not is_text_japanese(original_text):
+    if not should_translate_text(original_text):
         return original_text
+
+    layout = PROSE_LAYOUTS["walkthrough"]
+
+    # Fit the visible layout while letting the Frida hook write the complete
+    # replacement instead of injecting a synthetic ``...``.
+    def prepare(text: str) -> str:
+        translator = _init_translator()
+        fitted = fit_prose_layout(text, layout)
+        return prepare_game_text(fitted, translator.language)
 
     # check database first
     result = sql_read(text=original_text, table="walkthrough")
 
-    if result:
-        return result
-    else:
-        # not in database - translate it
-        translator = _init_translator()
-        translated_text = translator.translate(text=original_text, wrap_width=31, max_lines=3, add_brs=False)
+    if result and result != original_text:
+        return prepare(result)
 
-        # translate() returns a falsy value if translation was skipped (e.g. majority
-        # English text) or failed. Don't cache those cases to the database.
-        if translated_text:
-            sql_write(source_text=original_text, translated_text=translated_text, table="walkthrough")
-            return translated_text
+    # not in database - translate it
+    translator = _init_translator()
+    translated_text = translator.translate(
+        text=original_text,
+        wrap_width=layout.wrap_width,
+        max_lines=layout.max_lines,
+        add_brs=False,
+    )
 
-        return original_text
+    # translate() returns a falsy value if translation was skipped (e.g. majority
+    # English text) or failed. Don't cache those cases to the database.
+    if translated_text:
+        sql_write(source_text=original_text, translated_text=translated_text, table="walkthrough")
+        return prepare(translated_text)
+
+    return original_text
 
 
 def on_message(message, data, script):

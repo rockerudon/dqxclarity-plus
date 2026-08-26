@@ -1,5 +1,7 @@
 from common.db_ops import generate_m00_dict, sql_read, sql_write
-from common.translate import Translator, clean_up_and_return_items, is_text_japanese
+from common.language import prepare_game_text
+from common.translate import Translator, clean_up_and_return_items, is_text_japanese, should_translate_text
+from common.translation_domains import PROSE_LAYOUTS, fit_prose_layout
 from loguru import logger as log
 
 
@@ -27,18 +29,26 @@ def _query_quest(text: str) -> str:
     return _quests.get(text, None)
 
 
-def _translate_quest_desc(text: str) -> str:
+def _translate_quest_desc(text: str) -> str | None:
     """Translate quest description using DB cache or translator."""
     _init_translator()
+    layout = PROSE_LAYOUTS["quests"]
 
-    if db_quest_text := sql_read(text=text, table="quests"):
-        return db_quest_text
+    if (db_quest_text := sql_read(text=text, table="quests")) and db_quest_text != text:
+        fitted = fit_prose_layout(db_quest_text, layout)
+        return prepare_game_text(fitted, _translator.language)
 
     # translate() returns a falsy value if translation was skipped (e.g. majority
     # English text) or failed. Don't cache those cases to the database.
-    if translation := _translator.translate(text, wrap_width=49, max_lines=6, add_brs=False):
+    if translation := _translator.translate(
+        text,
+        wrap_width=layout.wrap_width,
+        max_lines=layout.max_lines,
+        add_brs=False,
+    ):
+        translation = fit_prose_layout(translation, layout)
         sql_write(source_text=text, translated_text=translation, table="quests")
-        return translation
+        return prepare_game_text(translation, _translator.language)
 
     return None
 
@@ -61,19 +71,22 @@ def process_quest_data(data: dict) -> dict:
     quest_rewards = data.get("questRewards", "")
     quest_repeat_rewards = data.get("questRepeatRewards", "")
 
-    # check if text is Japanese
+    # Names and rewards are canonical pack content. The overlay adds only the
+    # hook-visible prose description when the source is already localized.
     is_ja = is_text_japanese(quest_desc)
+    translate_description = should_translate_text(quest_desc)
 
     replacements = {}
 
     if is_ja:
+        _init_translator()
         if subquest_name:  # noqa: SIM102
             if replacement := _query_quest(subquest_name):
-                replacements["subquestName"] = replacement
+                replacements["subquestName"] = prepare_game_text(replacement, _translator.language)
 
         if quest_name:  # noqa: SIM102
             if replacement := _query_quest(quest_name):
-                replacements["questName"] = replacement
+                replacements["questName"] = prepare_game_text(replacement, _translator.language)
 
         if quest_desc:  # noqa: SIM102
             if replacement := _translate_quest_desc(quest_desc):
@@ -81,11 +94,17 @@ def process_quest_data(data: dict) -> dict:
 
         if quest_rewards:  # noqa: SIM102
             if replacement := clean_up_and_return_items(quest_rewards):
-                replacements["questRewards"] = replacement
+                replacements["questRewards"] = prepare_game_text(replacement, _translator.language)
 
         if quest_repeat_rewards:  # noqa: SIM102
             if replacement := clean_up_and_return_items(quest_repeat_rewards):
-                replacements["questRepeatRewards"] = replacement
+                # Capacity after the final field is not established; apply the
+                # language policy but do not claim an unsafe byte limit.
+                replacements["questRepeatRewards"] = prepare_game_text(replacement, _translator.language)
+
+    elif translate_description and quest_desc:
+        if replacement := _translate_quest_desc(quest_desc):
+            replacements["questDesc"] = replacement
 
     return replacements
 

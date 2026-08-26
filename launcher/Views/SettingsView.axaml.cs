@@ -168,6 +168,23 @@ public partial class SettingsView : UserControl
             }
         }
 
+        // Populate the shared API target-language combo.
+        if (TargetLanguageCombo != null)
+        {
+            TargetLanguageCombo.Items.Clear();
+            foreach (var opt in vm.TargetLanguageOptions)
+                TargetLanguageCombo.Items.Add(new ComboBoxItem { Content = opt.Display, Tag = opt.Code });
+
+            foreach (ComboBoxItem? item in TargetLanguageCombo.Items)
+            {
+                if (item?.Tag as string == vm.SelectedTargetLanguage?.Code)
+                {
+                    TargetLanguageCombo.SelectedItem = item;
+                    break;
+                }
+            }
+        }
+
         // Populate theme combo
         if (ThemeCombo != null)
         {
@@ -285,6 +302,16 @@ public partial class SettingsView : UserControl
         {
             _vm.SelectedTranslateService = SettingsViewModel.TranslateServiceOptions
                 .FirstOrDefault(o => o.Value == value);
+        }
+    }
+
+    private void OnTargetLanguageChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item
+            && item.Tag is string code && _vm != null)
+        {
+            _vm.SelectedTargetLanguage = _vm.TargetLanguageOptions.FirstOrDefault(o =>
+                string.Equals(o.Code, code, StringComparison.OrdinalIgnoreCase));
         }
     }
 

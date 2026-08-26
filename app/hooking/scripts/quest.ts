@@ -81,7 +81,34 @@
     // - key: quest description (unique identifier for quest)
     // - value: object with all 5 field replacements
     const questCache = new Map();
+    const translatedDescriptions = new Set();
 
+    function truncateUtf8(value, maxBytes) {
+        const encoded = unescape(encodeURIComponent(value));
+        if (encoded.length <= maxBytes) {
+            return value;
+        }
+        for (let length = maxBytes; length >= 0; length--) {
+            try {
+                return decodeURIComponent(escape(encoded.slice(0, length)));
+            } catch (e) {
+                // Continue until the cut is on a valid UTF-8 boundary.
+            }
+        }
+        return "";
+    }
+
+    function writeFixedField(address, replacement, fieldBytes) {
+        if (!replacement || fieldBytes <= 1) {
+            return null;
+        }
+        const safeReplacement = truncateUtf8(replacement, fieldBytes - 1);
+        if (!safeReplacement) {
+            return null;
+        }
+        address.writeUtf8String(safeReplacement);
+        return safeReplacement;
+    }
     Interceptor.attach(funcAddress, {
         onEnter: function(args) {
             try {
@@ -96,9 +123,14 @@
 
                 // read quest description first to check cache.
                 const questDesc = baseAddr.add(132).readUtf8String() || "";
+                const questRepeatRewards = baseAddr.add(744).readUtf8String() || "";
 
                 // quick check: if quest description is empty, return.
                 if (!questDesc || questDesc.length === 0) {
+                    return;
+                }
+
+                if (translatedDescriptions.has(questDesc)) {
                     return;
                 }
 
@@ -108,19 +140,26 @@
 
                     if (replacements) {
                         if (replacements.subquestName) {
-                            baseAddr.add(20).writeUtf8String(replacements.subquestName);
+                            writeFixedField(baseAddr.add(20), replacements.subquestName, 56);
                         }
                         if (replacements.questName) {
-                            baseAddr.add(76).writeUtf8String(replacements.questName);
+                            writeFixedField(baseAddr.add(76), replacements.questName, 56);
                         }
                         if (replacements.questDesc) {
-                            baseAddr.add(132).writeUtf8String(replacements.questDesc);
+                            const writtenDesc = writeFixedField(baseAddr.add(132), replacements.questDesc, 508);
+                            if (writtenDesc) {
+                                translatedDescriptions.add(writtenDesc);
+                            }
                         }
                         if (replacements.questRewards) {
-                            baseAddr.add(640).writeUtf8String(replacements.questRewards);
+                            writeFixedField(baseAddr.add(640), replacements.questRewards, 104);
                         }
                         if (replacements.questRepeatRewards) {
-                            baseAddr.add(744).writeUtf8String(replacements.questRepeatRewards);
+                            writeFixedField(
+                                baseAddr.add(744),
+                                replacements.questRepeatRewards,
+                                unescape(encodeURIComponent(questRepeatRewards)).length + 1
+                            );
                         }
                     }
                     return;
@@ -130,7 +169,6 @@
                 const subquestName = baseAddr.add(20).readUtf8String() || "";
                 const questName = baseAddr.add(76).readUtf8String() || "";
                 const questRewards = baseAddr.add(640).readUtf8String() || "";
-                const questRepeatRewards = baseAddr.add(744).readUtf8String() || "";
 
                 send({
                     type: 'quest_data',
@@ -154,22 +192,29 @@
                 if (replacements) {
                     // Write replacements back to memory
                     if (replacements.subquestName) {
-                        baseAddr.add(20).writeUtf8String(replacements.subquestName);
+                        writeFixedField(baseAddr.add(20), replacements.subquestName, 56);
                     }
                     if (replacements.questName) {
-                        baseAddr.add(76).writeUtf8String(replacements.questName);
+                        writeFixedField(baseAddr.add(76), replacements.questName, 56);
                     }
                     if (replacements.questDesc) {
-                        baseAddr.add(132).writeUtf8String(replacements.questDesc);
+                        const writtenDesc = writeFixedField(baseAddr.add(132), replacements.questDesc, 508);
 
                         // only cache if translation occurred
-                        questCache.set(questDesc, replacements);
+                        if (writtenDesc) {
+                            translatedDescriptions.add(writtenDesc);
+                            questCache.set(questDesc, replacements);
+                        }
                     }
                     if (replacements.questRewards) {
-                        baseAddr.add(640).writeUtf8String(replacements.questRewards);
+                        writeFixedField(baseAddr.add(640), replacements.questRewards, 104);
                     }
                     if (replacements.questRepeatRewards) {
-                        baseAddr.add(744).writeUtf8String(replacements.questRepeatRewards);
+                        writeFixedField(
+                            baseAddr.add(744),
+                            replacements.questRepeatRewards,
+                            unescape(encodeURIComponent(questRepeatRewards)).length + 1
+                        );
                     }
                 }
 

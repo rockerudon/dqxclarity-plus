@@ -7,6 +7,14 @@ namespace DqxClarity.Launcher.Services;
 
 public class UpdateService
 {
+    public const string DefaultRepository = "rockerudon/dqxclarity-multilang";
+    private readonly string _repository;
+
+    public UpdateService(string? repository = null) =>
+        _repository = string.IsNullOrWhiteSpace(repository)
+            ? Environment.GetEnvironmentVariable("DQXCLARITY_UPDATE_REPOSITORY") ?? DefaultRepository
+            : repository;
+
     private static HttpClient Http() =>
         new() { DefaultRequestHeaders = { { "User-Agent", "dqxclarity-launcher" } } };
 
@@ -51,8 +59,7 @@ public class UpdateService
             var curVer = (await File.ReadAllTextAsync(versionFile)).Trim();
 
             using var http = Http();
-            var resp = await http.GetAsync(
-                "https://api.github.com/repos/dqx-translation-project/dqxclarity/releases/latest");
+            var resp = await http.GetAsync($"https://api.github.com/repos/{_repository}/releases/latest");
             if (!resp.IsSuccessStatusCode) return null;
 
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
@@ -72,7 +79,7 @@ public class UpdateService
         var dir = ExeDir();
         var appDir = FindAppDir(dir);
 
-        var url = $"https://raw.githubusercontent.com/dqx-translation-project/dqxclarity/refs/tags/{tag}/app/updater.py";
+        var url = $"https://raw.githubusercontent.com/{_repository}/refs/tags/{tag}/app/updater.py";
         using var http = Http();
         var bytes = await http.GetByteArrayAsync(url);
 
@@ -80,7 +87,7 @@ public class UpdateService
         await File.WriteAllBytesAsync(updaterPath, bytes);
 
         var python = FindSystemPython() ?? "python3";
-        var psi = new ProcessStartInfo(python, $"\"{updaterPath}\"")
+        var psi = new ProcessStartInfo(python, $"\"{updaterPath}\" --repository \"{_repository}\"")
         {
             WorkingDirectory = appDir,
             UseShellExecute = false,

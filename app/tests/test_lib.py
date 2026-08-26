@@ -11,7 +11,8 @@ from common.lib import *
 class TestLib(unittest.TestCase):
     def test_get_project_root(self):
         root = get_project_root()
-        self.assertTrue(root.endswith("dqxclarity/app"))
+        self.assertEqual(os.path.basename(root), "app")
+        self.assertTrue(os.path.isfile(os.path.join(root, "main.py")))
 
 
 if __name__ == "__main__":

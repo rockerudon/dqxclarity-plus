@@ -37,7 +37,36 @@
 
     // cache for translations to avoid blocking on repeated text
     const translationCache = new Map();
+    const translatedValues = new Set();
 
+    function truncateUtf8(value, maxBytes) {
+        const encoded = unescape(encodeURIComponent(value));
+        if (encoded.length <= maxBytes) {
+            return value;
+        }
+        for (let length = maxBytes; length >= 0; length--) {
+            try {
+                return decodeURIComponent(escape(encoded.slice(0, length)));
+            } catch (e) {
+                // Continue until the cut is on a valid UTF-8 boundary.
+            }
+        }
+        return "";
+    }
+
+    function applyReplacement(address, sourceBytes, replacement) {
+        // This formatter's return value is consumed from its original inline
+        // buffer. Repointing the context fields produced a successful Python
+        // log entry but left Story So Far in Japanese on screen. The working
+        // BR hook writes this exact address; retain that behavior while
+        // bounding the replacement to the known source-buffer size.
+        const safeReplacement = truncateUtf8(replacement, sourceBytes);
+        if (!safeReplacement) {
+            return null;
+        }
+        address.writeUtf8String(safeReplacement);
+        return safeReplacement;
+    }
     Interceptor.attach(funcAddress, {
         onEnter: function (args) {
             // bool __cdecl ProcessTemplateString(int a1, int a2, unsigned int a3, int a4)
@@ -85,6 +114,10 @@
                     return;
                 }
 
+                if (translatedValues.has(`${category}:${originalText}`)) {
+                    return;
+                }
+
                 // create cache key combining category and text
                 const cacheKey = `${category}:${originalText}`;
 
@@ -92,7 +125,10 @@
                 if (translationCache.has(cacheKey)) {
                     const cachedReplacement = translationCache.get(cacheKey);
                     if (cachedReplacement && cachedReplacement !== originalText) {
-                        startOfStringAddr.writeUtf8String(cachedReplacement);
+                        const written = applyReplacement(startOfStringAddr, stringLength, cachedReplacement);
+                        if (written) {
+                            translatedValues.add(`${category}:${written}`);
+                        }
                     }
                     return;
                 }
@@ -114,8 +150,15 @@
                 if (replacement !== null) {
                     // write replacement to memory if different
                     if (replacement !== originalText) {
-                        startOfStringAddr.writeUtf8String(replacement);
-                        translationCache.set(cacheKey, replacement);
+                        const written = applyReplacement(startOfStringAddr, stringLength, replacement);
+                        if (written) {
+                            translationCache.set(cacheKey, written);
+                            translatedValues.add(`${category}:${written}`);
+                        } else {
+                            translationCache.set(cacheKey, null);
+                        }
+                    } else {
+                        translationCache.set(cacheKey, null);
                     }
                 }
 

@@ -2,6 +2,7 @@ import requests
 import time
 import uuid
 from common.config import UserConfig
+from common.language import provider_target_code
 from common.measure import measure_duration
 from loguru import logger as log
 
@@ -14,7 +15,9 @@ class YandexTranslate:
     def __init__(self, api_key: str = "") -> None:
         self._ucid: str | None = None
         self._ucid_time: float = 0
-        self.target = UserConfig().target_language
+        config = UserConfig()
+        self.target = provider_target_code("yandex", config.target_language)
+        self.source = config.source_language
 
     def _get_ucid(self) -> str:
         if self._ucid is None or (time.time() - self._ucid_time) > self._UCID_TTL:
@@ -31,8 +34,12 @@ class YandexTranslate:
                 response = requests.post(
                     self._URL,
                     params={"ucid": ucid, "srv": "android", "format": "text"},
-                    data={"text": phrase, "lang": f"ja-{self.target}"},
+                    data={
+                        "text": phrase,
+                        "lang": self.target if self.source == "auto" else f"{self.source}-{self.target}",
+                    },
                     headers=self._HEADERS,
+                    timeout=10,
                 )
                 response.raise_for_status()
                 data = response.json()

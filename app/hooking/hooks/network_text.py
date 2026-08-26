@@ -1,14 +1,18 @@
 """Hooks network text template string replacements."""
 
-from common.db_ops import generate_m00_dict, sql_read
+from common.config import UserConfig
+from common.db_ops import generate_m00_dict, sql_read, sql_write
+from common.language import prepare_game_text
 from common.lib import get_project_root, setup_logger
-from common.translate import is_text_japanese, transliterate_player_name
+from common.translate import Translator, is_text_japanese, should_translate_text, transliterate_player_name
+from common.translation_domains import PROSE_LAYOUTS, fit_prose_layout
 from loguru import logger as log
 
 
 # Module-level cache and logger
 _m00_text = None
 _custom_text_logger = None
+_language = None
 
 _translate_categories = {
     "<%sM_pc>",
@@ -17,6 +21,7 @@ _translate_categories = {
     "<%sB_TARGET_RPL>",
     "<%sM_00>",
     "<%sM_kaisetubun>",
+    "<%sM_text01>",
     "<%sC_QUEST>",
     "<%sC_PC>",
     "<%sM_OWNER>",
@@ -39,6 +44,13 @@ _translate_categories = {
     "<%sC_STR2>",
     "<%sL_MONSTERNAME>",
     "<%sEV_QUEST_NAME>",
+}
+
+_prose_categories = {
+    "<%sM_kaisetubun>": ("story_so_far", "story_so_far"),
+    # Observed in network-delivered story/progress summaries.  This category
+    # was previously logged as unknown and therefore stayed in Japanese.
+    "<%sM_text01>": ("fixed_dialog_template", "story_so_far"),
 }
 
 # categories to ignore (known but not translated)
@@ -107,12 +119,13 @@ _to_ignore = {
 
 def _init_data():
     """Initialize the m00 text database if not already loaded."""
-    global _m00_text, _custom_text_logger
+    global _m00_text, _custom_text_logger, _language
 
     if _m00_text is not None:
         return _m00_text
 
     _m00_text = generate_m00_dict()
+    _language = UserConfig().active_language
     _custom_text_logger = setup_logger("text_logger", get_project_root("logs/custom_text.log"))
 
     return _m00_text
@@ -131,8 +144,8 @@ def network_text_replacement(original_text: str, category: str) -> str:
     :param category: The category/variable name.
     :return: Replacement text, or original if no replacement.
     """
-    # only process Japanese text
-    if not is_text_japanese(original_text):
+    overlay_prose = category in _prose_categories and should_translate_text(original_text)
+    if not is_text_japanese(original_text) and not overlay_prose:
         return original_text
 
     # this hook hits on login screen, but we don't init data until player is logged in.
@@ -147,7 +160,7 @@ def network_text_replacement(original_text: str, category: str) -> str:
 
     if original_text.endswith("自分"):
         # "self" text when player/monster uses spell on themselves
-        return original_text.replace("自分", "self")
+        return original_text.replace("自分", m00_text.get("自分", "self"))
 
     if category not in _translate_categories:
         # log unknown category
@@ -200,15 +213,33 @@ def network_text_replacement(original_text: str, category: str) -> str:
             _custom_text_logger.info(f"--\n>>{category} ::\n{log_text}")
             return original_text
 
-    elif category == "<%sM_kaisetubun>":
-        # Story so far AND monster trivia
-        if story_text := sql_read(text=original_text, table="story_so_far"):
-            # truncate to original length to avoid overwriting game data
-            story_desc_len = len(bytes(original_text, encoding="utf-8"))
-            return story_text[:story_desc_len]
+    elif category in _prose_categories:
+        # Story summaries and network-delivered story/progress prose use the
+        # same measured box constraints. Prefer a manual pack entry when one
+        # exists, but permit direct Japanese MTL when the pack is incomplete.
+        table, layout_name = _prose_categories[category]
+        layout = PROSE_LAYOUTS[layout_name]
+        translation_source = m00_text.get(original_text) or original_text
+        if prose_text := sql_read(text=translation_source, table=table):
+            return fit_prose_layout(prose_text, layout)
+        elif should_translate_text(translation_source):
+            translator = Translator()
+            if translated := translator.translate(
+                translation_source,
+                wrap_width=layout.wrap_width,
+                max_lines=layout.max_lines,
+                add_brs=False,
+            ):
+                translated = fit_prose_layout(translated, layout)
+                try:
+                    sql_write(source_text=translation_source, translated_text=translated, table=table)
+                except Exception as exc:  # noqa: BLE001 - cache failures must not hide live text
+                    log.warning(f"Unable to cache network prose translation: {exc}")
+                return translated
+            return translation_source
         else:
             _custom_text_logger.info(f"--\n{category} ::\n{original_text}")
-            return original_text
+            return translation_source
 
     return original_text
 
@@ -232,6 +263,9 @@ def on_message(message, data, script):
 
             try:
                 replacement = network_text_replacement(original_text, category)
+                if replacement != original_text:
+                    _init_data()
+                    replacement = prepare_game_text(replacement, _language)
 
             except Exception as e:
                 log.exception(f"Replacement failed: {e}")
@@ -240,6 +274,11 @@ def on_message(message, data, script):
                 replacement = original_text
 
             # send the replacement back to Frida
+            if replacement != original_text:
+                log.debug(
+                    f"[network_text] category={category!r}, source={original_text[:160]!r}, "
+                    f"replacement={replacement[:160]!r}"
+                )
             log.trace(f"{original_text} => {replacement}")
             script.post({"type": "replacement", "text": replacement})
 

@@ -54,6 +54,10 @@ local-build\dqxclarity-mod.zip
 ```
 
 That folder contains the Python app, config/default files, database, and the rebuilt `dqxclarity.exe`.
+The distributable `user_settings.ini` is generated from the tracked
+`user_settings.example.ini`; real local credentials remain ignored by Git.
+Python virtual environments, tests, bytecode, and `__pycache__` folders are
+excluded from the package.
 
 ## Language pack format (CLPK)
 
@@ -79,7 +83,7 @@ Header metadata:
 }
 ```
 
-- `language` is an ISO code (`en`, `fr`, …). The launcher shows its display name (English, French) via `CultureInfo` and uses it as the pack's identity.
+- `language` is a canonical BCP 47 code (`en`, `pt-BR`, `fr`, …). The launcher shows its display name and uses it as the pack's identity.
 - `builtAt` is a Unix timestamp (seconds); shown as the pack's "updated" date.
 - `sha` is the SHA-256 of the ZIP payload, verified on download.
 - `downloadUrl` (optional) — a self-describing update URL. The official packs omit it; the launcher then uses the catalog's URL for that language to check for updates.
@@ -91,6 +95,9 @@ The **entire ZIP payload** is extracted into the game's `Game\mods` folder. Ther
 Use the launcher's **Advanced → Build language pack (CLPK)** tool: choose a plain `.zip` of your loose game files, set the author and language (and an optional download URL), and it stamps the header — computing the `sha` and `builtAt` — into a `.clpk`.
 
 The launcher scans the `dqxclarity/language-packs` folder for `*.clpk` (and `*.zip` whose contents are a CLPK).
+
+The active language packs and the API target are independent. Packs own static
+UI and canonical names; the optional API overlay handles supported prose fields.
 
 ## Notes
 

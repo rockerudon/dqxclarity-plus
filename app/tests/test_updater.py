@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from updater import main
+from updater import DEFAULT_UPDATE_REPOSITORY, main
 
 
 def make_zip(zip_path: str, files: dict) -> None:
@@ -34,6 +34,9 @@ class TestUpdaterMain(unittest.TestCase):
         # Write version.update so cur_ver can be read
         with open(os.path.join(self.work_dir, "version.update"), "w") as f:
             f.write("1.0.0")
+
+    def test_default_update_repository_is_multilingual_fork(self):
+        self.assertEqual(DEFAULT_UPDATE_REPOSITORY, "rockerudon/dqxclarity-multilang")
 
     def tearDown(self):
         shutil.rmtree(self.work_dir, ignore_errors=True)

@@ -5,6 +5,11 @@ namespace DqxClarity.Launcher.Services;
 
 public class DatabaseService
 {
+    private readonly string? _appDirOverride;
+
+    public DatabaseService(string? appDir = null) =>
+        _appDirOverride = string.IsNullOrWhiteSpace(appDir) ? null : Path.GetFullPath(appDir);
+
     private static string ExeDir()
     {
         var exe = Environment.ProcessPath ?? throw new Exception("Cannot determine executable path");
@@ -25,7 +30,7 @@ public class DatabaseService
 
     private string DbPath()
     {
-        var dir = FindAppDir(ExeDir());
+        var dir = _appDirOverride ?? FindAppDir(ExeDir());
         return Path.Combine(dir, "misc_files", "clarity_dialog.db");
     }
 
@@ -105,5 +110,14 @@ public class DatabaseService
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM dialog";
         cmd.ExecuteNonQuery();
+        cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='translation_values'";
+        if (cmd.ExecuteScalar() != null)
+        {
+            cmd.CommandText = """
+                DELETE FROM translation_values
+                WHERE domain = 'dialog' AND translation_kind IN ('machine', 'legacy')
+                """;
+            cmd.ExecuteNonQuery();
+        }
     }
 }

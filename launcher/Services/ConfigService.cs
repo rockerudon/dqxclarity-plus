@@ -5,6 +5,10 @@ namespace DqxClarity.Launcher.Services;
 public class ConfigService
 {
     public const string DefaultDqxDir = @"C:\Program Files (x86)\SquareEnix\DRAGON QUEST X";
+    private readonly string? _appDirOverride;
+
+    public ConfigService(string? appDir = null) =>
+        _appDirOverride = string.IsNullOrWhiteSpace(appDir) ? null : Path.GetFullPath(appDir);
 
     private static string ExeDir()
     {
@@ -14,6 +18,7 @@ public class ConfigService
 
     private string AppDir()
     {
+        if (_appDirOverride != null) return _appDirOverride;
         var dir = ExeDir();
         for (int i = 0; i < 4; i++)
         {
@@ -157,6 +162,11 @@ public class ConfigService
             OllamaUrl         = t.GetValueOrDefault("ollama_url")         ?? "http://localhost:11434",
             OllamaModel       = t.GetValueOrDefault("ollama_model")       ?? "llama3",
             LibreTranslateUrl = t.GetValueOrDefault("libretranslate_url") ?? "https://libretranslate.com",
+            TargetLanguage = LanguageCodes.Normalize(t.GetValueOrDefault("target_language")),
+            TargetLanguageName = t.GetValueOrDefault("target_language_name") ?? "",
+            ApiTranslationOverlay = ToBool(t.GetValueOrDefault("api_translation_overlay")),
+            GoogleFreeYandexFallback = ToBool(t.GetValueOrDefault("googlefree_yandex_fallback")),
+            AsciiOutputLanguages = t.GetValueOrDefault("ascii_output_languages") ?? "*",
         };
     }
 
@@ -217,10 +227,14 @@ public class ConfigService
         var bannerCollapsed  = existingLauncher.GetValueOrDefault("bannercollapsed")    ?? BoolToIni(launcher.BannerCollapsed);
         var langPackFirstRun = existingLauncher.GetValueOrDefault("languagepackfirstrundone") ?? BoolToIni(launcher.LanguagePackFirstRunDone);
 
-        // Preserve the runtime translation target (written separately from the active language packs).
         var existingTranslation = existing.GetValueOrDefault("translation") ?? [];
-        var targetLanguage     = existingTranslation.GetValueOrDefault("target_language") ?? "";
-        var targetLanguageName = existingTranslation.GetValueOrDefault("target_language_name") ?? "";
+        var targetLanguage = LanguageCodes.Normalize(
+            translation.TargetLanguage,
+            existingTranslation.GetValueOrDefault("target_language") ?? LanguageCodes.Default);
+        var targetLanguageName = translation.TargetLanguageName;
+        if (string.IsNullOrWhiteSpace(targetLanguageName))
+            targetLanguageName = LanguageNames.DisplayName(targetLanguage);
+        var asciiOutputLanguages = existingTranslation.GetValueOrDefault("ascii_output_languages") ?? "*";
 
         var sb = new System.Text.StringBuilder();
 
@@ -234,6 +248,9 @@ public class ConfigService
         WriteKv(sb, "libretranslate_url",  translation.LibreTranslateUrl);
         WriteKv(sb, "target_language",      targetLanguage);
         WriteKv(sb, "target_language_name", targetLanguageName);
+        WriteKv(sb, "api_translation_overlay", BoolToIni(translation.ApiTranslationOverlay));
+        WriteKv(sb, "googlefree_yandex_fallback", BoolToIni(translation.GoogleFreeYandexFallback));
+        WriteKv(sb, "ascii_output_languages", asciiOutputLanguages);
 
         if (configPairs.Count > 0)
         {
@@ -351,14 +368,21 @@ public class ConfigService
     public void SaveAutomaticLanguagePackUpdates(bool value) =>
         UpdateIniValue(ConfigPath(), "launcher", "automaticlanguagepackupdates", BoolToIni(value));
 
-    /// <summary>Writes the runtime translation target (highest-priority active language pack) into
-    /// the [translation] section, where the Python app reads it for its translation APIs.</summary>
+    /// <summary>Writes the user-selected runtime target read by every translation provider.</summary>
     public void SaveTargetLanguage(string code, string name)
     {
         var path = ConfigPath();
-        UpdateIniValue(path, "translation", "target_language", code);
-        UpdateIniValue(path, "translation", "target_language_name", name);
+        var canonical = LanguageCodes.Normalize(code);
+        UpdateIniValue(path, "translation", "target_language", canonical);
+        UpdateIniValue(path, "translation", "target_language_name",
+            string.IsNullOrWhiteSpace(name) ? LanguageNames.DisplayName(canonical) : name);
     }
+
+    public void SaveApiTranslationOverlay(bool value) =>
+        UpdateIniValue(ConfigPath(), "translation", "api_translation_overlay", BoolToIni(value));
+
+    public void SaveGoogleFreeYandexFallback(bool value) =>
+        UpdateIniValue(ConfigPath(), "translation", "googlefree_yandex_fallback", BoolToIni(value));
 
     public void SaveActiveLanguagePacks(IEnumerable<string> fileNames) =>
         UpdateIniValue(

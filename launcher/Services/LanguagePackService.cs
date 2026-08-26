@@ -28,8 +28,16 @@ public sealed class UpdateCheckResult
 
 public class LanguagePackService
 {
-    private static string AppDir()
+    private readonly string? _appDirOverride;
+
+    public LanguagePackService(string? appDir = null)
     {
+        _appDirOverride = string.IsNullOrWhiteSpace(appDir) ? null : Path.GetFullPath(appDir);
+    }
+
+    private string AppDir()
+    {
+        if (_appDirOverride != null) return _appDirOverride;
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? "") ?? AppContext.BaseDirectory;
         var dir = exeDir;
         for (var i = 0; i < 4; i++)
@@ -48,14 +56,16 @@ public class LanguagePackService
     private static string GameModsDir(string installDir) =>
         Path.Combine(GameDir(installDir), "mods");
 
-    private static string SourceLanguagePacksDir() =>
+    private string SourceLanguagePacksDir() =>
         Path.Combine(AppDir(), "language-packs");
 
     private static string TargetDll(string installDir) =>
         Path.Combine(GameDir(installDir), "version.dll");
 
-    public void EnsureSourceLanguagePacksFolder() =>
+    public void EnsureSourceLanguagePacksFolder()
+    {
         Directory.CreateDirectory(SourceLanguagePacksDir());
+    }
 
     public string GetSourceLanguagePacksFolder()
     {
@@ -121,17 +131,36 @@ public class LanguagePackService
             // Language packs are CLPK containers; their metadata lives in the header.
             if (meta == null)
                 return InvalidLanguagePack(path, "Not a Clarity language pack (.clpk)");
+            if (!LanguageCodes.TryNormalize(meta.Language, out var language))
+                return InvalidLanguagePack(path, $"Invalid BCP 47 language code: {meta.Language}");
+            if (string.IsNullOrWhiteSpace(meta.Sha))
+                return InvalidLanguagePack(path, "Missing payload sha256");
+
+            var actualSha = ClpkFormat.ComputeSha256Hex(payload);
+            if (!actualSha.Equals(meta.Sha, StringComparison.OrdinalIgnoreCase))
+                return InvalidLanguagePack(path, "Payload sha256 mismatch");
+
+            payload.Position = 0;
+            using (var archive = new ZipArchive(payload, ZipArchiveMode.Read, leaveOpen: true))
+            {
+                foreach (var entry in archive.Entries)
+                {
+                    var normalizedEntry = NormalizeZipPath(entry.FullName);
+                    if (!string.IsNullOrWhiteSpace(normalizedEntry))
+                        ValidateRelativeZipPath(normalizedEntry);
+                }
+            }
 
             // The whole zip payload is installed into Game\mods, so any valid CLPK is activatable.
             // Update URL: the pack's own (rarely set), else the catalog's URL for this language.
             var downloadUrl = !string.IsNullOrWhiteSpace(meta.DownloadUrl)
                 ? meta.DownloadUrl
-                : LanguagePackCatalog.DownloadUrlFor(meta.Language);
+                : LanguagePackCatalog.DownloadUrlFor(language);
 
             return new LanguagePack
             {
                 Author      = meta.Author ?? "",
-                Language    = meta.Language ?? "",
+                Language = language,
                 Updated     = FormatBuiltAt(meta.BuiltAt),
                 Path        = path,
                 DownloadUrl = downloadUrl,
@@ -493,10 +522,13 @@ public class LanguagePackService
             if (zipBytes.Length < 2 || zipBytes[0] != (byte)'P' || zipBytes[1] != (byte)'K')
                 throw new InvalidDataException("Input file is not a valid .zip archive (missing 'PK' signature).");
 
+            if (!LanguageCodes.TryNormalize(language, out var canonicalLanguage))
+                throw new InvalidDataException($"Invalid BCP 47 language code: {language}");
+
             var meta = new ClpkMetadata
             {
                 Author      = author ?? "",
-                Language    = language ?? "",
+                Language = canonicalLanguage,
                 BuiltAt     = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 DownloadUrl = downloadUrl ?? "",
             };

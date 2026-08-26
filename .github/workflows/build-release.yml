@@ -1,6 +1,9 @@
 ---
 name: Build release zip
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -31,16 +34,12 @@ jobs:
         run: |
           echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-8`" >> $GITHUB_ENV
           echo "CURRENT_TAG=`git describe --always --tags $(git rev-list --tags) | grep -v 'dev' | grep -E '^v' | head -n1 | cut -d"-" -f1`" >> $GITHUB_ENV
-          echo "NEW_TAG=`echo ${GITHUB_REF} | cut -d"/" -f3`" >> $GITHUB_ENV
-
-      - name: Bump version.update
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: echo $GITHUB_REF | cut -d"v" -f2 > version.update
 
       - name: Build package
         run: |
           rsync -av --exclude="imgs/" --exclude="launcher/" --exclude="tests/" app/* dqxclarity/;
-          cp version.update pyproject.toml user_settings.ini dqxclarity.exe dqxclarity/;
+          cp version.update pyproject.toml dqxclarity.exe dqxclarity/;
+          cp user_settings.example.ini dqxclarity/user_settings.ini;
           cp clarity_dialog.db dqxclarity/misc_files;
 
       - name: Zip package (pre-release)
@@ -70,48 +69,14 @@ jobs:
           name: 'Dev Build: ${{ env.CURRENT_TAG }}-dev'
           body: "This is a pre-release build! You don't want to download this!"
 
-      - name: Commit version.update to main
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: stefanzweifel/git-auto-commit-action@v7
-        id: auto-commit-action
-        with:
-          commit_message: 'Automated bump of version.update'
-          file_pattern: 'version.update'
-          branch: main
-        env:
-          GITHUB_TOKEN: ${{ secrets.SVC_ACCT_PAT }}
-
-      # probably a better way to do this. big no-no to move an existing tag,
-      # but there's no malicious stuff going on here. we just want the tag
-      # to include the updated version.update file and we're doing it strictly
-      # in CI. the tag is what triggers these steps and I don't want to manually
-      # update the version.update file before pushing the tag.
-      - name: Include previous commit in new tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          git checkout ${{ steps.auto-commit-action.outputs.commit_hash }}
-          git tag -f $NEW_TAG
-          git push --force origin $NEW_TAG
-        env:
-          GITHUB_TOKEN: ${{ secrets.SVC_ACCT_PAT }}
-
-      - name: Download previous release's dat/idx files
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: robinraju/release-downloader@v1.13
-        with:
-          latest: true
-          fileName: "english.clpk"
-
       - name: Create prod release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            dqxclarity.zip
-            english.clpk
+          files: dqxclarity.zip
           prerelease: false
           draft: false
-          tag_name: ${{ github.ref }}
-          name: 'Release: ${{ env.NEW_TAG }}'  # github.ref does not trim refs/tags/ when used here
+          tag_name: ${{ github.ref_name }}
+          name: 'dqxclarity multilingual ${{ github.ref_name }}'
           generate_release_notes: true
           fail_on_unmatched_files: true

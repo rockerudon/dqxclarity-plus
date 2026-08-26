@@ -13,6 +13,10 @@ from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
 
+DEFAULT_UPDATE_REPOSITORY = "rockerudon/dqxclarity-multilang"
+UPDATE_REPOSITORY = os.environ.get("DQXCLARITY_UPDATE_REPOSITORY", DEFAULT_UPDATE_REPOSITORY)
+
+
 def is_dqx_process_running():
     """Return True if DQX is currently running.
 
@@ -80,9 +84,9 @@ def fetch_release_info(tag: str = None) -> dict:
     """
     if tag:
         tag = tag if tag.startswith("v") else f"v{tag}"
-        url = f"https://api.github.com/repos/dqx-translation-project/dqxclarity/releases/tags/{tag}"
+        url = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/tags/{tag}"
     else:
-        url = "https://api.github.com/repos/dqx-translation-project/dqxclarity/releases/latest"
+        url = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
 
     req = Request(url)
     ctx = ssl.create_default_context()
@@ -107,12 +111,19 @@ def download_zip(url: str) -> ZipFile:
 
 
 def main():
+    global UPDATE_REPOSITORY
     parser = argparse.ArgumentParser(description="dqxclarity updater")
     parser.add_argument(
         "--release", metavar="TAG", help="Install a specific release version (e.g. v1.2.3) instead of the latest."
     )
     parser.add_argument("--work-dir", help="Directory to update (defaults to directory of this script)")
+    parser.add_argument(
+        "--repository",
+        default=UPDATE_REPOSITORY,
+        help="GitHub owner/repository to update from.",
+    )
     args = parser.parse_args()
+    UPDATE_REPOSITORY = args.repository
 
     work_dir = os.path.abspath(args.work_dir or os.path.split(os.path.abspath(__file__))[0])
 
@@ -141,7 +152,7 @@ def main():
         release = fetch_release_info(args.release)
         tag = release["tag_name"]
         new_ver = tag[1:]
-        zip_url = f"https://github.com/dqx-translation-project/dqxclarity/releases/download/{tag}/dqxclarity.zip"
+        zip_url = f"https://github.com/{UPDATE_REPOSITORY}/releases/download/{tag}/dqxclarity.zip"
         z_data = download_zip(zip_url)
     except Exception as e:
         input(

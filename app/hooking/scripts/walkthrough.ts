@@ -66,6 +66,55 @@
 
     // cache for translations to avoid blocking
     const translationCache = new Map();
+    // The game may call this formatter again with the text we wrote. Keep a
+    // reverse cache so an already translated walkthrough is never sent back
+    // through the API.
+    const translatedValues = new Set();
+
+    function utf8ByteLength(value) {
+        return unescape(encodeURIComponent(value)).length;
+    }
+
+    function truncateUtf8(value, maxBytes) {
+        const encoded = unescape(encodeURIComponent(value));
+        if (encoded.length <= maxBytes) {
+            return value;
+        }
+
+        // Cut only at a valid UTF-8 boundary. No ellipsis is added: it would
+        // consume buffer space and become part of the game text.
+        for (let length = maxBytes; length >= 0; length--) {
+            try {
+                return decodeURIComponent(escape(encoded.slice(0, length)));
+            } catch (e) {
+                // The cut landed in the middle of a multibyte character.
+            }
+        }
+        return "";
+    }
+
+    function writeWalkthroughText(address, sourceText, replacement) {
+        // This field is an inline game buffer. Its current string length is a
+        // safe lower bound for the available capacity; fit longer translations
+        // into that bound instead of overwriting adjacent memory.
+        const capacityBytes = utf8ByteLength(sourceText);
+        const safeReplacement = truncateUtf8(replacement, capacityBytes);
+        if (!safeReplacement) {
+            send({
+                type: 'info',
+                payload: `[${hookName}] Walkthrough replacement could not fit the source buffer; keeping pack text`
+            });
+            return null;
+        }
+        if (safeReplacement !== replacement) {
+            send({
+                type: 'info',
+                payload: `[${hookName}] Walkthrough replacement was shortened to fit the game buffer`
+            });
+        }
+        address.writeUtf8String(safeReplacement);
+        return safeReplacement;
+    }
 
     Interceptor.attach(calleeAddr, {
         onLeave: function(retval) {
@@ -81,11 +130,18 @@
                     return;
                 }
 
+                if (translatedValues.has(originalText)) {
+                    return;
+                }
+
                 // check cache first
                 if (translationCache.has(originalText)) {
                     const cachedReplacement = translationCache.get(originalText);
                     if (cachedReplacement && cachedReplacement !== originalText) {
-                        textAddress.writeUtf8String(cachedReplacement);
+                        const written = writeWalkthroughText(textAddress, originalText, cachedReplacement);
+                        if (written) {
+                            translatedValues.add(written);
+                        }
                     }
                     return;
                 }
@@ -106,8 +162,15 @@
                 if (replacement !== null) {
                     // write replacement to memory if different
                     if (replacement !== originalText) {
-                        textAddress.writeUtf8String(replacement);
-                        translationCache.set(originalText, replacement);
+                        const written = writeWalkthroughText(textAddress, originalText, replacement);
+                        if (written) {
+                            translationCache.set(originalText, replacement);
+                            translatedValues.add(written);
+                        } else {
+                            // Do not retry an unsafe replacement every time the
+                            // menu opens; the English pack text is the fallback.
+                            translationCache.set(originalText, originalText);
+                        }
                     }
                 }
 

@@ -16,7 +16,7 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: '3.11'
           architecture: 'x64'
 
       - name: Install dependencies
@@ -26,3 +26,17 @@ jobs:
         run: |
           cd app
           python -m unittest discover -s tests
+
+  launcher_core_tests:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Run launcher core tests
+        run: dotnet run --project launcher.tests/DqxClarity.Launcher.CoreTests.csproj --configuration Release

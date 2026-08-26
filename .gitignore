@@ -1,8 +1,14 @@
 __pycache__
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 venv*
 .vscode
 *.log
 .env
+/user_settings.ini
 app/defaults.pref
 app/misc_files/*.csv
 app/misc_files/*.xlsx
@@ -33,5 +39,9 @@ local-build/
 .idea/
 .vs/
 TestResults/
+/launcher.tests/bin/
+/launcher.tests/obj/
+*.user
+*.suo
 
 .claude

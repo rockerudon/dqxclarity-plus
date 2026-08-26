@@ -1,5 +1,6 @@
 import configparser
 import os
+from common.language import DEFAULT_ASCII_OUTPUT_LANGUAGES, LanguageContext
 from common.lib import get_project_root
 
 
@@ -22,11 +23,18 @@ class UserConfig:
             "ollama_url": "http://localhost:11434",
             "ollama_model": "llama3",
             "libretranslate_url": "https://libretranslate.com",
-            # Runtime translation target, written by the launcher from the highest-priority
-            # active language pack. Code (e.g. "en") drives API targets; name (e.g. "English")
-            # is injected into LLM prompts.
+            # Runtime translation target selected in the launcher. Code (e.g. "en")
+            # drives API targets; name (e.g. "English") is injected into LLM prompts.
             "target_language": "en",
             "target_language_name": "English",
+            # Opt-in runtime layer applied after language packs. Only text fields
+            # exposed by safe hooks are sent to the selected translation API.
+            "api_translation_overlay": "False",
+            # Optional continuity fallback for the anonymous Google endpoint.
+            # Only HTTP 429/cooldown traffic is sent to Yandex; Google remains
+            # the selected provider and is retried as soon as the cooldown ends.
+            "googlefree_yandex_fallback": "False",
+            "ascii_output_languages": "|".join(DEFAULT_ASCII_OUTPUT_LANGUAGES),
         }
         config["config"] = {"installdirectory": "C:/Program Files (x86)/SquareEnix/DRAGON QUEST X"}
         return config
@@ -36,6 +44,7 @@ class UserConfig:
 
         user_config = configparser.ConfigParser()
         user_config.read(self.file)
+        needs_write = False
 
         # migrate from old per-service boolean flags to a single translate_service string
         if user_config.has_section("translation") and not user_config.has_option("translation", "translate_service"):
@@ -43,13 +52,14 @@ class UserConfig:
             if t.get("enabledeepltranslate", "False").lower() == "true":
                 user_config.set("translation", "translate_service", "deepl")
                 user_config.set("translation", "translate_key", t.get("deepltranslatekey", ""))
+                needs_write = True
             elif t.get("enablegoogletranslate", "False").lower() == "true":
                 user_config.set("translation", "translate_service", "google")
                 user_config.set("translation", "translate_key", t.get("googletranslatekey", ""))
+                needs_write = True
             elif t.get("enablegoogletranslatefree", "False").lower() == "true":
                 user_config.set("translation", "translate_service", "googlefree")
-
-        needs_write = False
+                needs_write = True
 
         # add missing sections and keys from defaults
         for section in defaults.sections():
@@ -113,13 +123,53 @@ class UserConfig:
 
     @property
     def target_language(self) -> str:
-        """Target language code for runtime translation (e.g. "en"). Defaults to English."""
-        return self.translation_section.get("target_language", "en") or "en"
+        """Canonical target language code for runtime translation."""
+        return self.active_language.code
 
     @property
     def target_language_name(self) -> str:
-        """Human-readable target language name (e.g. "English"), used in LLM prompts."""
-        return self.translation_section.get("target_language_name", "English") or "English"
+        """Provider-facing target language name used in LLM prompts."""
+        return self.active_language.display_name
+
+    @property
+    def api_translation_overlay(self) -> bool:
+        """Whether hook-visible pack text gets an extra runtime API pass."""
+
+        try:
+            return self.translation_section.getboolean("api_translation_overlay", fallback=False)
+        except ValueError:
+            return False
+
+    @property
+    def googlefree_yandex_fallback(self) -> bool:
+        """Use Yandex temporarily while Google Free is rate limited."""
+
+        try:
+            return self.translation_section.getboolean("googlefree_yandex_fallback", fallback=False)
+        except ValueError:
+            return False
+
+    @property
+    def source_language(self) -> str:
+        """Runtime API source language selected by the optional overlay."""
+
+        return "auto" if self.api_translation_overlay else "ja"
+
+    @property
+    def source_language_name(self) -> str:
+        return "the detected source language" if self.api_translation_overlay else "Japanese"
+
+    @property
+    def ascii_output_languages(self) -> str:
+        return self.translation_section.get("ascii_output_languages", "")
+
+    @property
+    def active_language(self) -> LanguageContext:
+        return LanguageContext.create(
+            self.translation_section.get("target_language", "en"),
+            self.translation_section.get("target_language_name", ""),
+            self.ascii_output_languages,
+        )
 
     @property
     def config_section(self):

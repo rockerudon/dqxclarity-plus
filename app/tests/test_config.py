@@ -17,6 +17,28 @@ class TestConfig(unittest.TestCase):
         config = UserConfig(".")
         self.assertEqual(config.translate_service, "googlefree")
 
+    def test_api_translation_overlay_is_opt_in_and_switches_source_to_auto(self) -> None:
+        config = UserConfig(".")
+        self.assertFalse(config.api_translation_overlay)
+        self.assertEqual(config.source_language, "ja")
+
+        config.update(section="translation", key="api_translation_overlay", value="True")
+        config = UserConfig(".")
+        self.assertTrue(config.api_translation_overlay)
+        self.assertEqual(config.source_language, "auto")
+
+        config.update(section="translation", key="api_translation_overlay", value="False")
+
+    def test_googlefree_yandex_fallback_is_opt_in(self) -> None:
+        config = UserConfig(".")
+        self.assertFalse(config.googlefree_yandex_fallback)
+
+        config.update(section="translation", key="googlefree_yandex_fallback", value="True")
+        config = UserConfig(".")
+        self.assertTrue(config.googlefree_yandex_fallback)
+
+        config.update(section="translation", key="googlefree_yandex_fallback", value="False")
+
     def test_update_translate_service(self) -> None:
         config = UserConfig(".")
         config.update(section="translation", key="translate_service", value="deepl")
@@ -160,6 +182,15 @@ class TestConfig(unittest.TestCase):
         section = config.config_section
         self.assertIsNotNone(section)
         self.assertIn("installdirectory", section)
+
+    def test_target_language_is_normalized(self) -> None:
+        config = UserConfig(".")
+        config.update(section="translation", key="target_language", value="pt_br")
+        config.update(section="translation", key="target_language_name", value="Brazilian Portuguese")
+        config = UserConfig(".")
+        self.assertEqual(config.target_language, "pt-BR")
+        self.assertEqual(config.target_language_name, "Brazilian Portuguese")
+        self.assertTrue(config.active_language.ascii_output)
 
 
 if __name__ == "__main__":

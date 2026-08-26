@@ -5,8 +5,9 @@ from loguru import logger as log
 
 
 _PROMPT_TEMPLATE = (
-    "Translate the following Dragon Quest X dialogue from Japanese to {lang}. "
-    'Keep it localized and immersive. Return only the translated text.\n\n"{text}"'
+    "Translate the following Dragon Quest X dialogue from {source} to {lang}. "
+    "Keep it localized and immersive. Preserve every angle-bracket game tag and placeholder exactly. "
+    'Return only the translated text.\n\n"{text}"'
 )
 
 
@@ -16,6 +17,7 @@ class OllamaTranslate:
         self.url = cfg.ollama_url.rstrip("/") + "/api/generate"
         self.model = cfg.ollama_model
         self.lang = cfg.target_language_name
+        self.source = cfg.source_language_name
 
     @measure_duration
     def translate(self, text: list[str]) -> list[str]:
@@ -24,7 +26,7 @@ class OllamaTranslate:
             for phrase in text:
                 payload = {
                     "model": self.model,
-                    "prompt": _PROMPT_TEMPLATE.format(lang=self.lang, text=phrase),
+                    "prompt": _PROMPT_TEMPLATE.format(source=self.source, lang=self.lang, text=phrase),
                     "temperature": 0.1,
                     "stream": False,
                 }

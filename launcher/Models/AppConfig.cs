@@ -45,6 +45,11 @@ public class TranslationConfig
     public string OllamaUrl          { get; set; } = "http://localhost:11434";
     public string OllamaModel        { get; set; } = "llama3";
     public string LibreTranslateUrl  { get; set; } = "https://libretranslate.com";
+    public string TargetLanguage { get; set; } = LanguageCodes.Default;
+    public string TargetLanguageName { get; set; } = "English";
+    public bool ApiTranslationOverlay { get; set; }
+    public bool GoogleFreeYandexFallback { get; set; }
+    public string AsciiOutputLanguages { get; set; } = "*";
 }
 
 public class GameConfig

@@ -7,6 +7,7 @@ name = "dqxclarity"
 dynamic = ["version"]
 requires-python = ">=3.11"
 dependencies = [
+    "anyascii==0.3.3",
     "configparser==7.2.0",
     "cryptography==48.0.1",  # do not upgrade this, 49.0.0 no longer supports 32-bit python
     "deepl==1.29.0",

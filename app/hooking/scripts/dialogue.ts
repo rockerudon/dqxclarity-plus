@@ -36,7 +36,16 @@
     // cache for translations to avoid blocking on subsequent calls.
     // this provides near instant lookups for previously seen translations.
     const translationCache = new Map();
+    const translatedValues = new Set();
 
+    function applyReplacement(args, replacement) {
+        // This hook receives a pointer argument. Repointing the argument avoids
+        // overwriting an unknown-size pack buffer with a longer translation.
+        const replacementPtr = Memory.allocUtf8String(replacement);
+        args[0] = replacementPtr;
+        translatedValues.add(replacement);
+        return replacementPtr;
+    }
     Interceptor.attach(funcAddress, {
         onEnter: function(args) {
             try {
@@ -56,11 +65,15 @@
                     return;
                 }
 
+                if (translatedValues.has(originalText)) {
+                    return;
+                }
+
                 // check cache first and return if found.
                 if (translationCache.has(originalText)) {
-                    const cachedTranslation = translationCache.get(originalText);
-                    if (cachedTranslation && cachedTranslation !== originalText) {
-                        textPtr.writeUtf8String(cachedTranslation);
+                    const cached = translationCache.get(originalText);
+                    if (cached && cached.text !== originalText) {
+                        args[0] = cached.pointer;
                     }
                     return;
                 }
@@ -96,8 +109,10 @@
                 if (replacement) {
                     // write translation to memory if different
                     if (replacement !== originalText) {
-                        textPtr.writeUtf8String(replacement);
-                        translationCache.set(originalText, replacement);
+                        const replacementPtr = applyReplacement(args, replacement);
+                        translationCache.set(originalText, {text: replacement, pointer: replacementPtr});
+                    } else {
+                        translationCache.set(originalText, null);
                     }
                 }
 

@@ -1,5 +1,6 @@
 import requests
 from common.config import UserConfig
+from common.language import provider_target_code
 from common.measure import measure_duration
 from loguru import logger as log
 
@@ -13,7 +14,8 @@ class LibreTranslate:
         base = cfg.libretranslate_url.rstrip("/")
         self.url = f"{base}/translate"
         self.api_key = api_key
-        self.target = cfg.target_language
+        self.target = provider_target_code("libretranslate", cfg.target_language)
+        self.source = cfg.source_language
 
     @measure_duration
     def translate(self, text: list[str]) -> list[str]:
@@ -22,7 +24,7 @@ class LibreTranslate:
             for phrase in text:
                 payload: dict = {
                     "q": phrase,
-                    "source": "ja",
+                    "source": self.source,
                     "target": self.target,
                     "format": "text",
                 }

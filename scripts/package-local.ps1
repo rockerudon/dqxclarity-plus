@@ -38,14 +38,26 @@ New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
 
 $AppDir = Join-Path $RepoRoot "app"
 Get-ChildItem -LiteralPath $AppDir -Force | Where-Object {
-    $_.Name -notin @("tests", "__pycache__")
+    $_.Name -notin @("tests", "__pycache__") -and $_.Name -notlike "venv*"
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $PackageDir -Recurse -Force
 }
 
-foreach ($file in @("version.update", "pyproject.toml", "user_settings.ini")) {
+# Recursive copies can contain local Python bytecode created while testing.
+# It is never part of the application and may even reference deleted modules.
+Get-ChildItem -LiteralPath $PackageDir -Directory -Recurse -Force |
+    Where-Object Name -eq "__pycache__" |
+    Sort-Object FullName -Descending |
+    Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath $PackageDir -File -Recurse -Force -Include "*.pyc", "*.pyo" |
+    Remove-Item -Force
+
+foreach ($file in @("version.update", "pyproject.toml")) {
     Copy-Item -LiteralPath (Join-Path $RepoRoot $file) -Destination $PackageDir -Force
 }
+# Include the default settings file in a fresh local package.
+Copy-Item -LiteralPath (Join-Path $RepoRoot "user_settings.example.ini") `
+    -Destination (Join-Path $PackageDir "user_settings.ini") -Force
 
 Copy-Item -LiteralPath $LauncherExe -Destination (Join-Path $PackageDir "dqxclarity.exe") -Force
 
@@ -59,7 +71,9 @@ New-Item -ItemType Directory -Force -Path $PackageLanguagePacksDir | Out-Null
 $SourceLanguagePacksDir = Join-Path $RepoRoot "language-packs"
 $copiedSourceLanguagePacks = $false
 if (Test-Path $SourceLanguagePacksDir) {
-    Get-ChildItem -LiteralPath $SourceLanguagePacksDir -Filter "*.zip" -File | ForEach-Object {
+    Get-ChildItem -LiteralPath $SourceLanguagePacksDir -File | Where-Object {
+        $_.Extension -in @(".zip", ".clpk")
+    } | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $PackageLanguagePacksDir -Force
         $copiedSourceLanguagePacks = $true
     }
@@ -67,7 +81,9 @@ if (Test-Path $SourceLanguagePacksDir) {
 
 $BundledLanguagePacksDir = Join-Path (Split-Path -Parent $LauncherExe) "language-packs"
 if (-not $copiedSourceLanguagePacks -and (Test-Path $BundledLanguagePacksDir)) {
-    Get-ChildItem -LiteralPath $BundledLanguagePacksDir -Filter "*.zip" -File | ForEach-Object {
+    Get-ChildItem -LiteralPath $BundledLanguagePacksDir -File | Where-Object {
+        $_.Extension -in @(".zip", ".clpk")
+    } | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $PackageLanguagePacksDir -Force
     }
 }

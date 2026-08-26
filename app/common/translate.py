@@ -10,6 +10,7 @@ from common.db_ops import (  # Note: translators now imported dynamically via _g
     generate_m00_dict,
     init_db,
 )
+from common.language import is_suspicious_translation
 from functools import cache
 from loguru import logger as log
 
@@ -27,9 +28,6 @@ _KKS = pykakasi.kakasi()
 
 
 class Translator:
-    service = None
-    api_key = None
-    glossary = None
     _instance_cache = {}  # Class-level cache for translation instances
     _SERVICE_API = {
         "deepl": (
@@ -46,34 +44,25 @@ class Translator:
     }
 
     def __init__(self):
-        if Translator.service is None:
-            user_settings = UserConfig()
-            Translator.service = user_settings.translate_service
-            Translator.api_key = user_settings.translate_key
-
-        if Translator.glossary is None:
-            Translator.glossary = generate_glossary_dict()
+        user_settings = UserConfig()
+        self.service = user_settings.translate_service
+        self.api_key = user_settings.translate_key
+        self.language = user_settings.active_language
+        self.source_language = user_settings.source_language
+        # Glossaries are isolated by target language so one target's terms never
+        # leak into another provider request.
+        self.glossary = generate_glossary_dict(language_code=self.language.code)
 
     def __glossify(self, text):
-        for ja in Translator.glossary:
-            en = Translator.glossary[ja]
-
+        for source_text, translated_text in self.glossary.items():
             # use leading and trailing spaces in case two words are replaced back to back.
-            text = text.replace(ja, f" {en} ")
+            text = text.replace(source_text, f" {translated_text} ")
 
         # if two strings are replaced back to back, they will have a double space.
         text = text.replace("  ", " ")
         text = text.lstrip()
 
         return text
-
-    def __normalize_text(self, text: str) -> str:
-        """ "Normalize" text by only using latin alphabet.
-
-        :param text: Text to normalize
-        :returns: Normalized text.
-        """
-        return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
     def __swap_placeholder_tags(self, text: str, swap_back=False) -> str:
         if not swap_back:
@@ -225,33 +214,6 @@ class Translator:
             output = "\n".join(split_text)
             return output
 
-    def __is_majority_english(self, text: str) -> bool:
-        """Returns True if the text contains more English/Latin bytes than Japanese
-        script bytes, meaning it can skip glossification and translation.
-
-        Comparison is done in UTF-8 bytes rather than character count so that
-        multi-byte Japanese characters (hiragana, katakana, kanji — each 3 bytes)
-        are not underweighted against long runs of single-byte ASCII letters such
-        as English proper nouns that appear verbatim in the source text.
-
-        Tags (<...>) are stripped before counting so they don't skew the ratio.
-        When no meaningful script bytes are found the text is treated as English
-        and processing is skipped.
-
-        :param text: Raw pre-glossary text string to evaluate.
-        :returns: True if glossification and translation should be skipped.
-        """
-        combined = re.sub(r"<[^>]+>", "", text)
-
-        jp_bytes = len(_JP_REGEX.findall(combined)) * 3  # every JP char is 3 bytes in UTF-8
-        en_bytes = sum(1 for ch in combined if ch.isascii() and ch.isalpha())
-
-        total = jp_bytes + en_bytes
-        if total == 0:
-            return True
-
-        return en_bytes > jp_bytes
-
     def __api_translate(self, text: list) -> list:
         """Translates a list of strings using the cached translation service."""
         # Consolidated if-elif list to class-level _SERVICE_API Dict
@@ -260,39 +222,53 @@ class Translator:
 
         try:
             translator = self._get_translator_instance()  # Retrieve instance via the helper method
-            return translator.translate(text)
+            translated = translator.translate(text)
+            if not isinstance(translated, list):
+                log.error("Translation provider returned a non-list response; ignoring it.")
+                return []
+            for index, item in enumerate(translated):
+                if is_suspicious_translation(item):
+                    source_preview = repr(text[index][:160]) if index < len(text) else "<unknown>"
+                    result_preview = repr(str(item)[:160])
+                    log.error(
+                        f"Translation provider returned an invalid item at index {index}; "
+                        f"source={source_preview}, result={result_preview}"
+                    )
+                    return []
+            return translated
         except Exception as e:
-            log.exception(f"Translation failed for service '{Translator.service}': {e}")
+            log.exception(f"Translation failed for service '{self.service}': {e}")
             return []
 
     def _get_translator_instance(self):
         """Retrieve or initialize the translation instance from the class-level cache."""
         # New helper function for instance caching
 
-        if Translator.service not in Translator._SERVICE_API:  # 1. Check if service is supported
-            log.error(f"Service '{Translator.service}' is not supported.")
-            raise ValueError(f"Unsupported translation service: {Translator.service}")
+        if self.service not in Translator._SERVICE_API:  # 1. Check if service is supported
+            log.error(f"Service '{self.service}' is not supported.")
+            raise ValueError(f"Unsupported translation service: {self.service}")
 
-        if Translator.service in Translator._instance_cache:  # 2. Return from cache if already initialized
-            return Translator._instance_cache[Translator.service]
+        cache_key = (self.service, self.language.code, self.source_language)
+        if cache_key in Translator._instance_cache:  # 2. Return from cache if already initialized
+            return Translator._instance_cache[cache_key]
 
         try:
-            module_path, class_name = Translator._SERVICE_API[Translator.service]  # 3. Lazy import and initialize the class
-            log.info(f"Initializing new {Translator.service} translation instance...")
+            module_path, class_name = Translator._SERVICE_API[self.service]  # 3. Lazy import and initialize the class
+            log.info(f"Initializing new {self.service} translator for {self.language.code}...")
 
             module = importlib.import_module(module_path)
             translator_class = getattr(module, class_name)
 
-            instance = translator_class(Translator.api_key) if Translator.api_key else translator_class()
+            instance = translator_class(self.api_key) if self.api_key else translator_class()
 
-            Translator._instance_cache[Translator.service] = instance  # Store in cache and return
+            Translator._instance_cache[cache_key] = instance  # Store in cache and return
             return instance
 
         except Exception as e:
-            log.error(f"Failed to initialize {Translator.service} from {module_path}: {e}")
+            log.error(f"Failed to initialize {self.service} from {module_path}: {e}")
             raise
 
-    def translate(self, text: str, wrap_width: int, max_lines=None, add_brs=True):
+    def translate(self, text: str, wrap_width: int, max_lines=None, add_brs=True, translate_choices=True):
         """Sanitizes different tags and symbols, then translates the string.
 
         :param text: String to be translated.
@@ -302,6 +278,9 @@ class Translator:
                 lines are truncated with "..."
         :param add_brs: Whether to inject "<br>" every three lines to
                 break up text. Used for dialog mainly.
+        :param translate_choices: Whether selectable option lines may be sent
+                to the provider. Callers handling mixed control/prose payloads
+                may disable this to preserve the pack's UI controls.
         :returns: The translated string, or None if translation was
                 skipped (majority English) or failed. Callers should
                 treat a falsy return as "do not cache this result" and
@@ -309,8 +288,8 @@ class Translator:
         """
         log.debug(f"[Original]\n{text}")
 
-        if self.__is_majority_english(text):
-            log.debug("[Skip] Text is majority English (by byte weight), skipping translation.")
+        if not should_translate_text(text):
+            log.debug("[Skip] Text is outside the active runtime translation layer.")
             return None
 
         # manage our own line endings later
@@ -376,35 +355,42 @@ class Translator:
 
         # get the text to translate, splitting on all tags that don't start with % or &
         tag_re = re.compile("(<[^%&]*?>)")
-        select_re = re.compile(r"(<select.*>)")
+        # Selection controls are not ordinary prose.  Their option payload
+        # must remain line-oriented and immediately follow the control tag or
+        # the game renders it in the normal dialogue box.
+        select_start_re = re.compile(r"<select(?!_end\b)[^>]*>", re.IGNORECASE)
         str_split = [x for x in re.split(tag_re, output) if x]
 
-        count = 0
-        str_attrs = {}
+        str_attrs = []
 
         # iterate over each string, handling based on condition
-        for string in str_split:
+        for split_index, string in enumerate(str_split):
             if not re.match(tag_re, string):
                 # sole new lines need to stay where they are.
                 if string == "\n":
                     continue
 
                 # capture position of the string and replace with placeholder text
-                pristine_str = pristine_str.replace(string, f"<replace_me_index_{count}>")
+                attr_index = len(str_attrs)
+                pristine_str = pristine_str.replace(string, f"<replace_me_index_{attr_index}>", 1)
 
-                # <select*> lists always start with their first entry being a newline.
-                # if we see this, look back one index to see if we're inside a select tag.
-                if string.startswith("\n"):
-                    lookback = str_split.index(string) - 1
-                    if re.match(select_re, str_split[lookback]):
-                        str_attrs[count] = {
+                # A selection payload normally starts with a newline, but
+                # accepting a missing one lets us repair old cached entries.
+                is_list = split_index > 0 and bool(select_start_re.fullmatch(str_split[split_index - 1]))
+                if is_list:
+                    str_attrs.append(
+                        {
                             "text": string,
                             "is_list": True,
-                            "prepend_newline": False,
-                            "append_newline": False,
+                            "translate": translate_choices,
+                            # The game parser requires the option payload and
+                            # closing marker to be on their own lines.  Repair
+                            # packs that omitted either boundary.
+                            "prepend_newline": True,
+                            "append_newline": True,
                         }
-                        count += 1
-                        continue
+                    )
+                    continue
 
                 # capture how the newline was originally placed
                 append_newline = False
@@ -415,53 +401,75 @@ class Translator:
                 if string.startswith("\n"):
                     prepend_newline = True
 
-                string = string.replace("\n", "")
-                string = string.strip()
+                # Pack line wrapping is presentation, not word separation.
+                # Removing newlines outright produced requests such as
+                # ``placewhere`` and ``aretraveling``. Collapse them to one
+                # space while leaving selectable list payloads untouched.
+                string = re.sub(r"\s*\n\s*", " ", string).strip()
 
-                str_attrs[count] = {
-                    "text": string,
-                    "is_list": False,
-                    "prepend_newline": prepend_newline,
-                    "append_newline": append_newline,
-                }
-
-                count += 1
+                str_attrs.append(
+                    {
+                        "text": string,
+                        "is_list": False,
+                        "translate": True,
+                        "prepend_newline": prepend_newline,
+                        "append_newline": append_newline,
+                    }
+                )
 
         # translate our list of strings
         to_translate = []
-        for i, _attr in enumerate(str_attrs):
-            # dqx <select> lists are always at the end of the string. we'll append all list items
-            # to the end of our python list so we can pass them to the translation service individually.
-            if not str_attrs[i]["is_list"]:
-                to_translate.append(str_attrs[i]["text"])
+        for attr in str_attrs:
+            attr["translation_start"] = len(to_translate)
+            if not attr["translate"]:
+                attr["translation_count"] = 0
+            elif not attr["is_list"]:
+                to_translate.append(attr["text"])
+                attr["translation_count"] = 1
             else:
-                for line in str_attrs[i]["text"].splitlines():
+                lines = [line for line in attr["text"].splitlines() if line]
+                for line in lines:
                     if line:
                         to_translate.append(line)
+                attr["translation_count"] = len(lines)
 
         log.debug(f"[Post-glossary]\n{to_translate}")
-        translated_list = self.__api_translate(text=to_translate)
+        translated_list = self.__api_translate(text=to_translate) if to_translate else []
         log.debug(f"[Post-translated]\n{translated_list}")
 
-        if not translated_list or len(translated_list) != len(to_translate):
-            log.exception(f"{self.service} translation failed.")
+        if len(translated_list) != len(to_translate):
+            log.error(
+                f"{self.service} translation failed: expected {len(to_translate)} "
+                f"items, received {len(translated_list)}."
+            )
             return ""
 
-        # update our str_attrs dict with the new, translated string
-        for count, i in enumerate(translated_list):
-            if not str_attrs[count]["is_list"]:
-                str_attrs[count]["text"] = i
+        # Update each attribute from its own slice.  The previous implementation
+        # used the attribute index as a translation index, so a list following
+        # prose consumed the wrong entries and lost its leading newline.
+        for attr_index, attr in enumerate(str_attrs):
+            if not attr["translate"]:
+                pristine_str = pristine_str.replace(f"<replace_me_index_{attr_index}>", attr["text"], 1)
+                continue
+            start = attr["translation_start"]
+            end = start + attr["translation_count"]
+            translated_items = translated_list[start:end]
+            if attr["is_list"]:
+                joined_list = "\n".join(translated_items)
+                if attr["prepend_newline"]:
+                    joined_list = "\n" + joined_list
+                if attr["append_newline"]:
+                    joined_list += "\n"
+                attr["text"] = joined_list
             else:
-                joined_list = "\n".join(translated_list[count:])
-                str_attrs[count]["text"] = joined_list + "\n"
-                # lists are the last strings in dialogue, so we don't need to
-                # parse anymore once we've found one.
-                break
+                attr["text"] = translated_items[0]
 
         # search for any weird space usage and remove it.
         # this comes from deepl and are all scenarios that have been seen with
         # translations coming back from machine translation.
         for count, _ in enumerate(str_attrs):
+            if not str_attrs[count]["translate"]:
+                continue
             str_text = str_attrs[count]["text"]
             str_text = str_text.replace("　 ", " ")
             str_text = str_text.replace(" 　", " ")
@@ -477,12 +485,11 @@ class Translator:
             # game doesn't render curly apostrophes, replace with straight apostrophes.
             str_text = str_text.replace("’", "'")
 
-            # game doesn't render em-dash. we use the Japanese "ー" instead to simulate one.
+            # game doesn't render em-dash. use two ASCII hyphens instead.
             updated_str = str_text.replace("—", "--")
-            updated_str = self.__normalize_text(updated_str)
             if str_attrs[count]["is_list"]:
-                # select lists will always have more than 1 entry..
-                # leave selection lists alone. please don't fuck this up, deepl
+                # Selection lists contain multiple entries and must retain their
+                # original line boundaries after provider translation.
                 updated_str = self.__swap_placeholder_tags(updated_str, swap_back=True)
                 updated_str = re.sub(r"<&color_(\w+)>", r"<color_\1>", updated_str)
                 updated_str = re.sub(r"(?<![<])&color_(\w+)>", r"<color_\1>", updated_str)
@@ -604,6 +611,34 @@ def is_text_japanese(text: str) -> bool:
     sanitized = re.sub("<.+?>", "", text)
 
     return bool(_JP_REGEX.search(sanitized))
+
+
+@cache
+def _runtime_translation_policy() -> tuple[str, bool]:
+    """Load immutable per-process translation settings once."""
+
+    config = UserConfig()
+    return config.target_language, config.api_translation_overlay
+
+
+def should_translate_text(text: str) -> bool:
+    """Return whether a hook-visible prose field should use the API layer.
+
+    Legacy mode accepts Japanese only. The opt-in overlay also accepts Latin
+    prose from a language pack, but leaves symbols, numbers and English-to-
+    English requests alone. Hooks decide which fields are prose, so static UI
+    and canonical names never reach this function.
+    """
+
+    if not text or not text.strip():
+        return False
+    target_language, overlay_enabled = _runtime_translation_policy()
+    if is_text_japanese(text):
+        return target_language != "ja"
+    if not overlay_enabled or target_language == "en":
+        return False
+    visible = re.sub(r"<[^>]+>", "", text)
+    return any(character.isascii() and character.isalpha() for character in visible)
 
 
 @cache

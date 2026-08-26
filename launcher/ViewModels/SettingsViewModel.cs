@@ -212,25 +212,8 @@ public partial class SettingsViewModel : ObservableObject
     ];
 
     public ObservableCollection<TargetLanguageOption> TargetLanguageOptions { get; } =
-    [
-        new("ar",      "Arabic"),
-        new("pt-BR",   "Brazilian Portuguese"),
-        new("nl",      "Dutch"),
-        new("en",      "English"),
-        new("fr",      "French"),
-        new("de",      "German"),
-        new("it",      "Italian"),
-        new("ja",      "Japanese"),
-        new("ko",      "Korean"),
-        new("pl",      "Polish"),
-        new("pt-PT",   "European Portuguese"),
-        new("ru",      "Russian"),
-        new("zh-Hans", "Simplified Chinese"),
-        new("es",      "Spanish"),
-        new("zh-Hant", "Traditional Chinese"),
-        new("tr",      "Turkish"),
-        new("uk",      "Ukrainian"),
-    ];
+        new(LanguageCodes.RuntimeTranslationTargets.Select(code =>
+            new TargetLanguageOption(code, LanguageNames.DisplayName(code))));
 
     [ObservableProperty] private TranslateServiceOption? _selectedTranslateService;
     [ObservableProperty] private TargetLanguageOption? _selectedTargetLanguage;
@@ -671,17 +654,11 @@ public partial class SettingsViewModel : ObservableObject
         _selectedTranslateService = TranslateServiceOptions.FirstOrDefault(o => o.Value == savedService)
                                     ?? TranslateServiceOptions.First(o => o.Value == "googlefree");
         var savedTargetCode = LanguageCodes.Normalize(config.Translation.TargetLanguage);
+        if (!LanguageCodes.IsRuntimeTranslationTarget(savedTargetCode))
+            savedTargetCode = LanguageCodes.Default;
         var savedTarget = TargetLanguageOptions.FirstOrDefault(o =>
-            string.Equals(o.Code, savedTargetCode, StringComparison.OrdinalIgnoreCase));
-        if (savedTarget == null)
-        {
-            savedTarget = new TargetLanguageOption(
-                savedTargetCode,
-                string.IsNullOrWhiteSpace(config.Translation.TargetLanguageName)
-                    ? LanguageNames.DisplayName(savedTargetCode)
-                    : config.Translation.TargetLanguageName);
-            TargetLanguageOptions.Add(savedTarget);
-        }
+            string.Equals(o.Code, savedTargetCode, StringComparison.OrdinalIgnoreCase))
+            ?? TargetLanguageOptions.First(o => o.Code == LanguageCodes.Default);
         _selectedTargetLanguage = savedTarget;
         _apiTranslationOverlay = config.Translation.ApiTranslationOverlay;
         _googleFreeYandexFallback = config.Translation.GoogleFreeYandexFallback;

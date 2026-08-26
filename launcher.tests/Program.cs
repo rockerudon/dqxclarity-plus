@@ -11,6 +11,9 @@ static void Assert(bool condition, string message)
 Assert(LanguageCodes.Normalize("PT_br") == "pt-BR", "BCP 47 normalization failed");
 Assert(LanguageNames.DisplayName("pt-BR") == "Brazilian Portuguese", "pt-BR display name failed");
 Assert(LanguageNames.DisplayName("zh-Hant") == "Traditional Chinese", "script display name failed");
+Assert(LanguageCodes.IsRuntimeTranslationTarget("pt-BR"), "Latin-script target was removed");
+foreach (var unsupported in new[] { "ar", "ja", "ko", "ru", "uk", "zh-Hans", "zh-Hant" })
+    Assert(!LanguageCodes.IsRuntimeTranslationTarget(unsupported), $"unsupported target is still selectable: {unsupported}");
 Assert(UpdateService.DefaultRepository == "rockerudon/dqxclarity-multilang", "updater does not target the fork");
 
 var temp = Path.Combine(Path.GetTempPath(), $"dqxclarity-launcher-test-{Guid.NewGuid():N}");

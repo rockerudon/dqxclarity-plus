@@ -62,9 +62,11 @@ and its [troubleshooting guide](https://dqx-translation-project.github.io/troubl
 
 ## Providers and fallback
 
-All original providers can target the selected language. Provider-specific
-language codes are normalized only at their API boundary, while cache entries
-retain their full language identity such as `pt-BR` or `zh-Hant`.
+All original providers can target the selected language. The launcher offers
+English, Brazilian and European Portuguese, Spanish, French, German, Italian,
+Dutch, Polish and Turkish. Provider-specific language codes are normalized only
+at their API boundary, while cache entries retain their full language identity
+such as `pt-BR` or `pt-PT`.
 
 When Google Translate Mobile (free) is selected, an additional opt-in setting
 can use Yandex only while Google is rate limited. Google is retried when its
@@ -78,6 +80,9 @@ controls, the result is rejected and the pack/source text remains visible.
 
 - Static UI coverage is determined by the active language pack and is currently
   English-first.
+- Arabic, Cyrillic, Chinese and Korean targets are not offered because DQX does
+  not reliably render those scripts and ASCII romanization is not sufficiently
+  readable. Japanese is the source language and is not a translation target.
 - Some game render paths are not exposed to runtime hooks and can remain
   Japanese or English.
 - Layout limits vary between game windows. Known walkthrough, quest and story

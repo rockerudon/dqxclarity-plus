@@ -8,6 +8,28 @@ public static partial class LanguageCodes
     public const string Default = "en";
     public const string Source = "ja";
 
+    // DQX reliably renders printable ASCII and its native Japanese glyphs, but
+    // the runtime translation target must remain useful after the final ASCII
+    // safety conversion. Non-Latin scripts become lossy romanizations, so they
+    // are intentionally not offered by the launcher.
+    public static IReadOnlyList<string> RuntimeTranslationTargets { get; } =
+    [
+        "pt-BR",
+        "nl",
+        "en",
+        "fr",
+        "de",
+        "it",
+        "pl",
+        "pt-PT",
+        "es",
+        "tr",
+    ];
+
+    public static bool IsRuntimeTranslationTarget(string? value) =>
+        TryNormalize(value, out var normalized) &&
+        RuntimeTranslationTargets.Contains(normalized, StringComparer.OrdinalIgnoreCase);
+
     [GeneratedRegex("^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$", RegexOptions.CultureInvariant)]
     private static partial Regex LanguageCodeRegex();
 

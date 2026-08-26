@@ -175,7 +175,7 @@
                                     </Grid>
 
                                     <TextBlock IsVisible="{Binding !IsNoneService}"
-                                               Text="DQX reliably renders ASCII and native Japanese. Other scripts and accented characters are romanized automatically so dialogue remains visible."
+                                               Text="DQX reliably renders printable ASCII and native Japanese. Runtime targets are limited to readable Latin-script languages; accents are simplified automatically at the game boundary."
                                                FontSize="10"
                                                Foreground="{DynamicResource AppMuted}"
                                                TextWrapping="Wrap"/>

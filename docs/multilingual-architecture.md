@@ -78,14 +78,24 @@ This makes the complete upstream English pack a useful static foundation while
 allowing runtime prose to target Portuguese, Spanish or another supported
 language. Disabling the overlay restores legacy Japanese-only API behavior.
 
+The launcher exposes only Latin-script runtime targets that remain readable
+after DQX's ASCII safety conversion: English, Brazilian and European Portuguese,
+Spanish, French, German, Italian, Dutch, Polish and Turkish. Arabic, Cyrillic,
+Chinese and Korean targets are intentionally omitted. Japanese is the source
+language rather than a translation target. The lower-level language and cache
+model remains BCP 47-compatible so future renderer work or community tooling
+does not require another database redesign.
+
 ## Unicode storage and game output
 
 Full Unicode is stored in SQLite. `ascii_output_languages = *` enables the safe
 game boundary for every non-Japanese target. For `pt-BR`, `você`, `ação`,
 `coração`, and `bênção` remain intact in the cache and become `voce`, `acao`,
 `coracao`, and `bencao` only immediately before a hook response. Spanish
-diacritics and punctuation are handled the same way; non-Latin scripts such as
-Arabic, Cyrillic, Greek, Han, and Hangul are romanized to printable ASCII.
+diacritics and punctuation are handled the same way. Non-Latin scripts are
+still romanized defensively if a legacy or manually edited
+configuration reaches the runtime, but those targets are not offered by the
+launcher because the result is generally not readable enough for normal use.
 
 Game tags and placeholders are split out before ASCII transformation. UTF-8
 length and truncation helpers count bytes, never characters, and never cut through

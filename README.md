@@ -28,6 +28,10 @@ The project does not generate automatic full language packs. At present, the
 launcher downloads the maintained English pack as the static foundation. Text
 which is neither in that pack nor exposed through a safe hook may remain in
 Japanese. Canonical/wiki-searchable names intentionally remain in English.
+When one appears inside translated prose, the runtime takes its official English
+spelling from the upstream database, protects it during the provider request and
+restores it afterward. The provider still receives the complete sentence for
+grammar and context.
 
 Because injected DQX text does not reliably render every Unicode glyph, the
 database preserves full Unicode while non-Japanese output is converted to a

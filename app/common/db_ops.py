@@ -15,6 +15,27 @@ from pathlib import Path
 
 
 _TRANSLATION_TABLE = "translation_values"
+_MACHINE_CACHE_VERSION = "canonical-english-v1"
+_DYNAMIC_MACHINE_DOMAINS = (
+    "corner_text",
+    "dialog",
+    "fixed_dialog_template",
+    "quests",
+    "story_so_far",
+    "walkthrough",
+)
+_CANONICAL_M00_FILES = (
+    "items",
+    "key_items",
+    "monsters",
+    "npcs",
+    "quests",
+    "story_names",
+    "custom_npc_name_overrides",
+    "custom_concierge_mail_names",
+)
+_CANONICAL_CONNECTORS = frozenset({"a", "an", "and", "at", "for", "from", "in", "of", "on", "the", "to", "with"})
+_KATAKANA_NAME_RE = re.compile(r"[\u30a0-\u30ff\uff65-\uff9fー・ ]+")
 
 
 def init_db(db_path: str | Path | None = None) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
@@ -56,6 +77,7 @@ def create_db_schema(db_path: str | Path | None = None) -> None:
         migrations_dir = Path(get_project_root("common/db_scripts/migrations"))
         for migration in sorted(migrations_dir.glob("*.sql")):
             cursor.executescript(migration.read_text(encoding="utf-8"))
+        _refresh_machine_cache_version(cursor)
         conn.commit()
     except (OSError, sqlite3.Error, ValueError) as exc:
         if conn:
@@ -330,6 +352,104 @@ def _dialogue_variant_rows(language_code: str) -> dict[str, str]:
         return result
     except sqlite3.Error:
         log.exception("Failed to load normalized dialogue cache.")
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+
+def _refresh_machine_cache_version(cursor: sqlite3.Cursor) -> None:
+    """Invalidate obsolete MTL output once, preserving manual and pack data."""
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS translation_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
+    row = cursor.execute(
+        "SELECT value FROM translation_metadata WHERE key = 'machine_cache_version'"
+    ).fetchone()
+    if row and row[0] == _MACHINE_CACHE_VERSION:
+        return
+
+    placeholders = ",".join("?" for _ in _DYNAMIC_MACHINE_DOMAINS)
+    cursor.execute(
+        f"DELETE FROM translation_values WHERE translation_kind = 'machine' AND domain IN ({placeholders})",
+        _DYNAMIC_MACHINE_DOMAINS,
+    )
+    cursor.execute(
+        """
+        INSERT INTO translation_metadata (key, value)
+        VALUES ('machine_cache_version', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (_MACHINE_CACHE_VERSION,),
+    )
+
+
+def _canonical_title_case(text: str) -> bool:
+    """Conservatively distinguish names/titles from ordinary glossary prose."""
+
+    if not text or "\n" in text or len(text) > 80 or re.search(r"[.!?;:<>{}=+%]", text):
+        return False
+    words = re.findall(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*", text)
+    if not words:
+        return False
+    for index, word in enumerate(words):
+        plain = word.strip("'’-")
+        if not plain or plain.isdigit() or re.fullmatch(r"[IVXLCDM]+", plain):
+            continue
+        if index and plain.lower() in _CANONICAL_CONNECTORS:
+            continue
+        if not plain[0].isupper():
+            return False
+    return True
+
+
+@cache
+def generate_canonical_glossary() -> dict[str, str]:
+    """Return Japanese-to-official-English pairs safe to preserve during MTL.
+
+    Static tables contain item descriptions as well as names, so this loader
+    intentionally accepts only short title-like values. The broad glossary is
+    filtered more strictly; single-word entries must look like transliterated
+    Japanese names or also occur inside a trusted static name.
+    """
+
+    conn: sqlite3.Connection | None = None
+    try:
+        conn, cursor = init_db()
+        placeholders = ",".join("?" for _ in _CANONICAL_M00_FILES)
+        strong_rows = cursor.execute(
+            f"SELECT ja, en FROM m00_strings WHERE file IN ({placeholders}) AND en IS NOT NULL AND en != ''",
+            _CANONICAL_M00_FILES,
+        ).fetchall()
+        pairs: dict[str, str] = {
+            source: english
+            for source, english in strong_rows
+            if source and _canonical_title_case(english)
+        }
+        trusted_words = {
+            word
+            for english in pairs.values()
+            for word in re.findall(r"[A-Za-z][A-Za-z'’-]+", english)
+            if word[0].isupper()
+        }
+
+        for source, english in cursor.execute("SELECT ja, en FROM glossary WHERE en IS NOT NULL AND en != ''"):
+            if not source or not _canonical_title_case(english):
+                continue
+            words = re.findall(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*", english)
+            if len(words) > 1 or english in trusted_words or _KATAKANA_NAME_RE.fullmatch(source):
+                pairs.setdefault(source, english)
+
+        # Long Japanese keys win when a location contains a shorter place name.
+        return dict(sorted(pairs.items(), key=lambda item: len(item[0]), reverse=True))
+    except sqlite3.Error as exc:
+        log.exception(f"Unable to load canonical English terms. {exc}.")
         return {}
     finally:
         if conn:

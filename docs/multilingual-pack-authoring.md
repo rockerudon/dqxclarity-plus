@@ -26,9 +26,11 @@ quantidade e ordem de opções; se a validação falhar, todo o bloco permanece 
 idioma do pack. Nenhum marcador novo deve ser inventado para “reconstruir” uma
 caixa de escolha.
 
-Títulos de quests, recompensas, itens e outros nomes pesquisáveis não devem ser
-enviados para a API. A grafia inglesa continua compatível com as wikis em inglês
-e japonês.
+Títulos de quests, recompensas, itens e outros nomes pesquisáveis permanecem na
+grafia inglesa, compatível com as wikis em inglês e japonês. Quando um desses
+termos aparece dentro de uma frase traduzível, ele é substituído temporariamente
+por um marcador validado; assim a API ainda recebe a frase completa, mas não pode
+traduzir o nome canônico.
 
 ## Prioridade
 

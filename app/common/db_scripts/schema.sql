@@ -57,6 +57,12 @@ CREATE TABLE IF NOT EXISTS "glossary" (
 	PRIMARY KEY("ja")
 );
 
+CREATE TABLE IF NOT EXISTS "translation_metadata" (
+	"key"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
+	PRIMARY KEY("key")
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS "dialog_index" ON "dialog" (
 	"ja"
 );

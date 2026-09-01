@@ -1,11 +1,14 @@
+import html
 import importlib  # Required for lazy loading modules
 import pykakasi
 import re
 import regex
 import textwrap
 import unicodedata
+from common.canonical_terms import CanonicalTermProtector
 from common.config import UserConfig
 from common.db_ops import (  # Note: translators now imported dynamically via _get_translator_instance helper
+    generate_canonical_glossary,
     generate_glossary_dict,
     generate_m00_dict,
     init_db,
@@ -25,6 +28,13 @@ _VALID_CODEPOINTS = _HIRAGANA_CODEPOINTS | _KATAKANA_CODEPOINTS
 _JP_REGEX = regex.compile(r"\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Han}")
 
 _KKS = pykakasi.kakasi()
+
+
+@cache
+def _shared_canonical_protector() -> CanonicalTermProtector:
+    """Build the sizeable canonical-name tries once for all hook translators."""
+
+    return CanonicalTermProtector(generate_canonical_glossary())
 
 
 class Translator:
@@ -52,6 +62,7 @@ class Translator:
         # Glossaries are isolated by target language so one target's terms never
         # leak into another provider request.
         self.glossary = generate_glossary_dict(language_code=self.language.code)
+        self._canonical_protector = _shared_canonical_protector()
 
     def __glossify(self, text):
         for source_text, translated_text in self.glossary.items():
@@ -227,6 +238,10 @@ class Translator:
                 log.error("Translation provider returned a non-list response; ignoring it.")
                 return []
             for index, item in enumerate(translated):
+                # Google API and some HTML-backed providers entity-escape game
+                # placeholders even when they otherwise preserve them exactly.
+                item = html.unescape(str(item))
+                translated[index] = item
                 if is_suspicious_translation(item):
                     source_preview = repr(text[index][:160]) if index < len(text) else "<unknown>"
                     result_preview = repr(str(item)[:160])
@@ -347,6 +362,15 @@ class Translator:
         # replace all variable name tags that expand to other text
         output = self.__swap_placeholder_tags(output)
 
+        # Replace Japanese game names with their official English equivalents,
+        # then shield those names while the provider translates the surrounding
+        # sentence. This keeps terms searchable against the English wiki without
+        # sacrificing the grammatical context sent to machine translation.
+        canonical_protector = getattr(self, "_canonical_protector", None)
+        protected_terms: dict[str, str] = {}
+        if canonical_protector:
+            output, protected_terms = canonical_protector.prepare(output)
+
         # pass string through our glossary to replace any common words
         output = self.__glossify(output)
 
@@ -449,7 +473,6 @@ class Translator:
         # prose consumed the wrong entries and lost its leading newline.
         for attr_index, attr in enumerate(str_attrs):
             if not attr["translate"]:
-                pristine_str = pristine_str.replace(f"<replace_me_index_{attr_index}>", attr["text"], 1)
                 continue
             start = attr["translation_start"]
             end = start + attr["translation_count"]
@@ -464,11 +487,31 @@ class Translator:
             else:
                 attr["text"] = translated_items[0]
 
+        # Validate and restore every canonical marker before wrapping. Markers
+        # are deliberately short; wrapping first could make a restored long
+        # location or item name overflow the game's dialogue box.
+        if canonical_protector and protected_terms:
+            separator = "\0"
+            restored_attrs = canonical_protector.restore(
+                separator.join(attr["text"] for attr in str_attrs),
+                protected_terms,
+            )
+            if restored_attrs is None:
+                log.error("Translation provider changed a protected canonical-term marker; using the source text.")
+                return ""
+            for attr, restored_text in zip(str_attrs, restored_attrs.split(separator), strict=True):
+                attr["text"] = restored_text
+
         # search for any weird space usage and remove it.
         # this comes from deepl and are all scenarios that have been seen with
         # translations coming back from machine translation.
         for count, _ in enumerate(str_attrs):
             if not str_attrs[count]["translate"]:
+                pristine_str = pristine_str.replace(
+                    f"<replace_me_index_{count}>",
+                    str_attrs[count]["text"],
+                    1,
+                )
                 continue
             str_text = str_attrs[count]["text"]
             str_text = str_text.replace("　 ", " ")

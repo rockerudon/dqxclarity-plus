@@ -17,6 +17,18 @@ class TestTranslate(unittest.TestCase):
         )
         self.assertEqual(translator._Translator__api_translate(["こんにちは"]), [])
 
+    def test_provider_html_entities_are_restored_for_game_placeholders(self):
+        translator = Translator.__new__(Translator)
+        translator.glossary = {}
+        translator._get_translator_instance = lambda: MagicMock(
+            translate=lambda phrases: ["Derrote &lt;&amp;dqxc_0000&gt;."]
+        )
+
+        self.assertEqual(
+            translator._Translator__api_translate(["Defeat <&dqxc_0000>."]),
+            ["Derrote <&dqxc_0000>."],
+        )
+
     def test_selectable_dialogue_controls_are_detected(self):
         self.assertTrue(contains_choice_markup("Choose:<select>\nFirst\nSecond\n<select_end>"))
         self.assertTrue(contains_choice_markup("Choose:<select_se_off>\nFirst\nSecond\n<select_end>"))

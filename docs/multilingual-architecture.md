@@ -61,6 +61,18 @@ The intended display chain is:
    hooks and stores the result for the selected target language;
 4. the pack-provided text remains visible when no safe dynamic result exists.
 
+Before a provider request, short title-like entries from the upstream item,
+monster, NPC, quest and story tables are combined with conservatively filtered
+place/name entries from the English glossary. Japanese matches are canonicalized
+to English and both Japanese-origin and already-English pack terms are replaced
+with validated opaque markers. The complete sentence is then translated and the
+official English spellings are restored. A missing or duplicated marker rejects
+the result instead of caching damaged terminology.
+
+The canonical-terminology revision invalidates obsolete machine-generated prose
+once through `translation_metadata`. Manual translations, legacy English pack
+rows and static database content are never deleted.
+
 Packaging does not generate synthetic or empty language packs. Pack selection
 and API target selection are independent. The launcher verifies the SHA and ZIP
 structure of local CLPKs before activation.

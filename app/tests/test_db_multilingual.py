@@ -16,9 +16,11 @@ class TestMultilingualDatabase(unittest.TestCase):
         self.patcher = patch("common.db_ops.init_db", side_effect=lambda db_path=None: original_init(self.path))
         self.patcher.start()
         db_ops._dialogue_variant_rows.cache_clear()
+        db_ops.generate_canonical_glossary.cache_clear()
 
     def tearDown(self):
         db_ops._dialogue_variant_rows.cache_clear()
+        db_ops.generate_canonical_glossary.cache_clear()
         self.patcher.stop()
         os.remove(self.path)
 
@@ -95,6 +97,61 @@ class TestMultilingualDatabase(unittest.TestCase):
         self.assertIsNone(db_ops.read_dialogue_translation_variant("新規", language_code="pt-BR"))
         db_ops.sql_write("「新規」", "Novo", "dialog", language_code="pt-BR")
         self.assertEqual(db_ops.read_dialogue_translation_variant("新規", language_code="pt-BR"), "Novo")
+
+    def test_canonical_glossary_keeps_names_but_rejects_descriptions(self):
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.executemany(
+                "INSERT INTO m00_strings (ja, en, file) VALUES (?, ?, ?)",
+                [
+                    ("薬草", "Medicinal Herb", "items"),
+                    ("説明", "Restores\nsome HP.", "items"),
+                ],
+            )
+            conn.executemany(
+                "INSERT INTO glossary (ja, en) VALUES (?, ?)",
+                [
+                    ("グレン城下町駅", "Glen Castle Town Station"),
+                    ("アストルティア", "Astoltia"),
+                    ("どうしますか", "What would you like to do"),
+                    ("幻惑", "Dazzling"),
+                ],
+            )
+            conn.commit()
+        db_ops.generate_canonical_glossary.cache_clear()
+
+        canonical = db_ops.generate_canonical_glossary()
+
+        self.assertEqual(canonical["薬草"], "Medicinal Herb")
+        self.assertEqual(canonical["グレン城下町駅"], "Glen Castle Town Station")
+        self.assertEqual(canonical["アストルティア"], "Astoltia")
+        self.assertNotIn("説明", canonical)
+        self.assertNotIn("どうしますか", canonical)
+        self.assertNotIn("幻惑", canonical)
+
+    def test_machine_cache_version_invalidates_only_obsolete_generated_text(self):
+        db_ops.write_translation("古い機械", "Old machine", "dialog", language_code="pt-BR")
+        db_ops.write_translation(
+            "手動",
+            "Manual",
+            "dialog",
+            language_code="pt-BR",
+            translation_kind="manual",
+        )
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.execute(
+                "UPDATE translation_metadata SET value = 'old' WHERE key = 'machine_cache_version'"
+            )
+            conn.commit()
+
+        db_ops.create_db_schema(self.path)
+
+        self.assertIsNone(db_ops.read_translation("古い機械", "dialog", language_code="pt-BR"))
+        self.assertEqual(db_ops.read_translation("手動", "dialog", language_code="pt-BR"), "Manual")
+
+        # Once upgraded, newly generated entries survive ordinary startups.
+        db_ops.write_translation("新しい機械", "New machine", "dialog", language_code="pt-BR")
+        db_ops.create_db_schema(self.path)
+        self.assertEqual(db_ops.read_translation("新しい機械", "dialog", language_code="pt-BR"), "New machine")
 
 
 class TestLegacyCompatibility(unittest.TestCase):

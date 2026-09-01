@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 _TRANSLATION_TABLE = "translation_values"
-_MACHINE_CACHE_VERSION = "canonical-english-v1"
+_MACHINE_CACHE_VERSION = "canonical-english-v2"
 _DYNAMIC_MACHINE_DOMAINS = (
     "corner_text",
     "dialog",

@@ -99,14 +99,6 @@ class CanonicalTermProtector:
         if not self.enabled or not text:
             return text, {}
 
-        segments = self._visible_segments(text)
-        for index in range(0, len(segments), 2):
-            segments[index] = self._source_terms.replace(
-                segments[index],
-                lambda english: english,
-                ascii_word_boundaries=False,
-            )
-
         protected: dict[str, str] = {}
 
         def marker_for(english: str) -> str:
@@ -114,6 +106,22 @@ class CanonicalTermProtector:
             protected[marker] = english
             return marker
 
+        segments = self._visible_segments(text)
+        # Never expose a Japanese-to-English replacement to the provider.
+        # Adjacent Japanese terms and particles have no ASCII word boundary;
+        # replacing them with English first could create strings such as
+        # ``Port LendorCocolata Beach`` that the English trie could no longer
+        # recognize and shield.  Mark the Japanese match directly instead.
+        for index in range(0, len(segments), 2):
+            segments[index] = self._source_terms.replace(
+                segments[index],
+                marker_for,
+                ascii_word_boundaries=False,
+            )
+
+        # Also protect official English names already supplied by a language
+        # pack. Japanese replacements above are opaque tags and cannot be
+        # matched again by this pass.
         for index in range(0, len(segments), 2):
             segments[index] = self._english_terms.replace(
                 segments[index],

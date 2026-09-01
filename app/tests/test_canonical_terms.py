@@ -38,6 +38,23 @@ class TestCanonicalTermProtector(unittest.TestCase):
         self.assertEqual(list(protected.values()), ["Verinard West"])
         self.assertEqual(protector.restore(prepared, protected), "<pc>Verinard West")
 
+    def test_adjacent_japanese_names_are_never_exposed_as_joined_english(self):
+        protector = CanonicalTermProtector(
+            {
+                "港町レンドア": "Port Lendor",
+                "ココラタの浜辺": "Cocolata Beach",
+            }
+        )
+
+        prepared, protected = protector.prepare("港町レンドアココラタの浜辺間を")
+
+        self.assertNotIn("Port LendorCocolata Beach", prepared)
+        self.assertEqual(len(protected), 2)
+        self.assertEqual(
+            protector.restore(prepared, protected),
+            "Port LendorCocolata Beach間を",
+        )
+
     def test_missing_or_duplicated_marker_is_rejected(self):
         protector = CanonicalTermProtector({"水竜": "Water Dragon"})
         prepared, protected = protector.prepare("Defeat Water Dragon.")

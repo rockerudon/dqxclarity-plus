@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 _TRANSLATION_TABLE = "translation_values"
-_MACHINE_CACHE_VERSION = "canonical-english-v3"
+_MACHINE_CACHE_VERSION = "canonical-english-v4"
 _DYNAMIC_MACHINE_DOMAINS = (
     "corner_text",
     "dialog",
@@ -36,6 +36,61 @@ _CANONICAL_M00_FILES = (
 )
 _CANONICAL_CONNECTORS = frozenset({"a", "an", "and", "at", "for", "from", "in", "of", "on", "the", "to", "with"})
 _KATAKANA_NAME_RE = re.compile(r"[\u30a0-\u30ff\uff65-\uff9fー・ ]+")
+_LOCATION_SOURCE_SUFFIXES = (
+    "レンダーシア",
+    "地方",
+    "城下町",
+    "王国",
+    "城",
+    "町",
+    "村",
+    "島",
+    "大陸",
+    "領西",
+    "領東",
+    "領南",
+    "領北",
+    "領",
+    "海岸",
+    "浜辺",
+    "平原",
+    "草原",
+    "湿原",
+    "森林",
+    "樹林帯",
+    "密林",
+    "荒野",
+    "荒涼地帯",
+    "砂漠",
+    "高地",
+    "山地",
+    "峠",
+    "街道",
+    "水源",
+    "湖",
+    "川",
+    "谷",
+    "峡谷",
+    "温泉峡",
+    "洞くつ",
+    "洞窟",
+    "洞",
+    "塔",
+    "神殿",
+    "寺院",
+    "宮殿",
+    "遺跡",
+    "地下水路",
+    "水路",
+    "坑道",
+    "鉱山",
+    "火山",
+    "井戸",
+    "駅",
+    "港",
+    "門",
+    "広場",
+)
 
 
 def init_db(db_path: str | Path | None = None) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
@@ -409,6 +464,30 @@ def _canonical_title_case(text: str) -> bool:
     return True
 
 
+def _add_lendersia_world_variants(pairs: dict[str, str]) -> None:
+    """Add official True/False forms for canonical Lendersia place names.
+
+    The English pack usually stores the base area name separately while live
+    Japanese prose prefixes it with ``真の`` or ``偽りの``. Protecting only the
+    base name lets an API translate the qualifier (for example, ``falso
+    Lendersia``). Derive complete canonical names only for location-shaped
+    sources so ordinary phrases such as "true hero" remain translatable.
+    """
+
+    base_places = [
+        (source, english)
+        for source, english in pairs.items()
+        if not source.startswith(("偽りの", "真の")) and source.endswith(_LOCATION_SOURCE_SUFFIXES)
+    ]
+    for source, english in base_places:
+        for japanese_prefix, english_prefix in (("偽りの", "False"), ("真の", "True")):
+            canonical = f"{english_prefix} {english}"
+            pairs.setdefault(f"{japanese_prefix}{source}", canonical)
+            # Game strings often insert a full-width layout space between the
+            # world qualifier and the area name.
+            pairs.setdefault(f"{japanese_prefix}　{source}", canonical)
+
+
 @cache
 def generate_canonical_glossary() -> dict[str, str]:
     """Return Japanese-to-official-English pairs safe to preserve during MTL.
@@ -445,6 +524,8 @@ def generate_canonical_glossary() -> dict[str, str]:
             words = re.findall(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*", english)
             if len(words) > 1 or english in trusted_words or _KATAKANA_NAME_RE.fullmatch(source):
                 pairs.setdefault(source, english)
+
+        _add_lendersia_world_variants(pairs)
 
         # Long Japanese keys win when a location contains a shorter place name.
         return dict(sorted(pairs.items(), key=lambda item: len(item[0]), reverse=True))

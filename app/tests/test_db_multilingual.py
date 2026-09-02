@@ -111,6 +111,7 @@ class TestMultilingualDatabase(unittest.TestCase):
                 "INSERT INTO glossary (ja, en) VALUES (?, ?)",
                 [
                     ("グレン城下町駅", "Glen Castle Town Station"),
+                    ("アラハギーロ地方", "Al-Ahagiro Region"),
                     ("アストルティア", "Astoltia"),
                     ("どうしますか", "What would you like to do"),
                     ("幻惑", "Dazzling"),
@@ -123,7 +124,11 @@ class TestMultilingualDatabase(unittest.TestCase):
 
         self.assertEqual(canonical["薬草"], "Medicinal Herb")
         self.assertEqual(canonical["グレン城下町駅"], "Glen Castle Town Station")
+        self.assertEqual(canonical["偽りのアラハギーロ地方"], "False Al-Ahagiro Region")
+        self.assertEqual(canonical["偽りの　アラハギーロ地方"], "False Al-Ahagiro Region")
+        self.assertEqual(canonical["真のアラハギーロ地方"], "True Al-Ahagiro Region")
         self.assertEqual(canonical["アストルティア"], "Astoltia")
+        self.assertNotIn("偽りの薬草", canonical)
         self.assertNotIn("説明", canonical)
         self.assertNotIn("どうしますか", canonical)
         self.assertNotIn("幻惑", canonical)

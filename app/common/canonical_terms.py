@@ -8,10 +8,29 @@ from collections.abc import Callable, Mapping
 
 _END = ""
 _TAG_RE = re.compile(r"(<[^>]+>)")
+_HIRAGANA_TERM_RE = re.compile(r"[\u3040-\u309fー・]+")
 
 
 def _is_ascii_word_character(character: str) -> bool:
     return character.isascii() and (character.isalnum() or character == "_")
+
+
+def _is_japanese_word_character(character: str) -> bool:
+    return (
+        "\u3040" <= character <= "\u30ff"
+        or "\u3400" <= character <= "\u4dbf"
+        or "\u4e00" <= character <= "\u9fff"
+        or "\uff65" <= character <= "\uff9f"
+    )
+
+
+def _safe_source_match(text: str, start: int, end: int) -> bool:
+    """Reject hiragana names found in the middle of ordinary words."""
+
+    term = text[start:end]
+    if not _HIRAGANA_TERM_RE.fullmatch(term) or start == 0:
+        return True
+    return not _is_japanese_word_character(text[start - 1])
 
 
 class _ReplacementTrie:
@@ -33,6 +52,7 @@ class _ReplacementTrie:
         replacement_factory: Callable[[str], str],
         *,
         ascii_word_boundaries: bool,
+        match_filter: Callable[[str, int, int], bool] | None = None,
     ) -> str:
         if not self._root or not text:
             return text
@@ -53,7 +73,12 @@ class _ReplacementTrie:
                 node = node[text[cursor]]
                 cursor += 1
                 if _END in node:
-                    if not ascii_word_boundaries or cursor == len(text) or not _is_ascii_word_character(text[cursor]):
+                    has_word_boundary = (
+                        not ascii_word_boundaries
+                        or cursor == len(text)
+                        or not _is_ascii_word_character(text[cursor])
+                    )
+                    if has_word_boundary and (match_filter is None or match_filter(text, index, cursor)):
                         best_end = cursor
                         best_replacement = node[_END]
 
@@ -117,6 +142,7 @@ class CanonicalTermProtector:
                 segments[index],
                 marker_for,
                 ascii_word_boundaries=False,
+                match_filter=_safe_source_match,
             )
 
         # Also protect official English names already supplied by a language
@@ -132,11 +158,17 @@ class CanonicalTermProtector:
 
     @staticmethod
     def restore(text: str, protected: Mapping[str, str]) -> str | None:
-        """Restore markers, rejecting provider output that lost or duplicated one."""
+        """Restore surviving markers and reject only malformed marker residue.
 
-        for marker in protected:
-            if text.count(marker) != 1:
-                return None
+        Translation providers sometimes omit a repeated name or an entire
+        location while naturally restructuring a sentence.  A missing marker
+        is therefore not corruption and must not discard the whole translated
+        block.  A damaged marker is unsafe because it could reach the game as
+        visible control text, so any such residue is still rejected.
+        """
+
         for marker, english in protected.items():
             text = text.replace(marker, english)
+        if "dqxc_" in text.lower():
+            return None
         return text

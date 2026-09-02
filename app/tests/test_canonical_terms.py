@@ -55,13 +55,25 @@ class TestCanonicalTermProtector(unittest.TestCase):
             "Port LendorCocolata Beach間を",
         )
 
-    def test_missing_or_duplicated_marker_is_rejected(self):
+    def test_missing_marker_is_allowed_but_malformed_marker_is_rejected(self):
         protector = CanonicalTermProtector({"水竜": "Water Dragon"})
         prepared, protected = protector.prepare("Defeat Water Dragon.")
         marker = next(iter(protected))
 
-        self.assertIsNone(protector.restore(prepared.replace(marker, ""), protected))
-        self.assertIsNone(protector.restore(prepared.replace(marker, marker + marker), protected))
+        self.assertEqual(protector.restore(prepared.replace(marker, ""), protected), "Defeat .")
+        self.assertIsNone(protector.restore(prepared.replace(marker, marker.replace("<&", "<")), protected))
+
+    def test_hiragana_name_does_not_match_inside_an_ordinary_word(self):
+        protector = CanonicalTermProtector({"かりな": "Carina"})
+
+        prepared, protected = protector.prepare("手がかりなんてない。　かりなに話そう。")
+
+        self.assertIn("手がかりなんてない", prepared)
+        self.assertEqual(list(protected.values()), ["Carina"])
+        self.assertEqual(
+            protector.restore(prepared, protected),
+            "手がかりなんてない。　Carinaに話そう。",
+        )
 
     def test_translator_preserves_terms_while_translating_full_sentence(self):
         translator = Translator.__new__(Translator)

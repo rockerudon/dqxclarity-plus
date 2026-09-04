@@ -4,6 +4,7 @@ import ctypes
 import ctypes.wintypes
 import json
 import os
+import re
 import shutil
 import ssl
 import sys
@@ -13,7 +14,7 @@ from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
 
-DEFAULT_UPDATE_REPOSITORY = "rockerudon/dqxclarity-multilang"
+DEFAULT_UPDATE_REPOSITORY = "rockerudon/dqxclarity-plus"
 UPDATE_REPOSITORY = os.environ.get("DQXCLARITY_UPDATE_REPOSITORY", DEFAULT_UPDATE_REPOSITORY)
 
 
@@ -76,6 +77,11 @@ def kill_exe(name: str) -> None:
     os.system(f"taskkill /f /im {name} >nul 2>&1")
 
 
+def release_version(tag: str) -> str:
+    """Keep release branding separate from the numeric Python package version."""
+    return tag.removeprefix("plus-v").removeprefix("v")
+
+
 def fetch_release_info(tag: str = None) -> dict:
     """Fetch release metadata from GitHub.
 
@@ -83,7 +89,9 @@ def fetch_release_info(tag: str = None) -> dict:
     latest published release.
     """
     if tag:
-        tag = tag if tag.startswith("v") else f"v{tag}"
+        # Bare numeric versions now identify Plus releases. Explicit legacy
+        # v5.x tags remain available for manual installation/rollback.
+        tag = f"plus-v{tag}" if re.fullmatch(r"\d+\.\d+\.\d+", tag) else tag
         url = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/tags/{tag}"
     else:
         url = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest"
@@ -114,7 +122,7 @@ def main():
     global UPDATE_REPOSITORY
     parser = argparse.ArgumentParser(description="dqxclarity updater")
     parser.add_argument(
-        "--release", metavar="TAG", help="Install a specific release version (e.g. v1.2.3) instead of the latest."
+        "--release", metavar="TAG", help="Install a specific release (e.g. plus-v1.0.0 or legacy v5.26.6)."
     )
     parser.add_argument("--work-dir", help="Directory to update (defaults to directory of this script)")
     parser.add_argument(
@@ -151,7 +159,7 @@ def main():
     try:
         release = fetch_release_info(args.release)
         tag = release["tag_name"]
-        new_ver = tag[1:]
+        new_ver = release_version(tag)
         zip_url = f"https://github.com/{UPDATE_REPOSITORY}/releases/download/{tag}/dqxclarity.zip"
         z_data = download_zip(zip_url)
     except Exception as e:

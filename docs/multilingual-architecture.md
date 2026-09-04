@@ -163,6 +163,8 @@ Keep multilingual changes in small topic commits when commits are requested:
 Do not rewrite the shipped database schema into per-language columns and do not
 modify real DAT files as part of a core synchronization.
 
-The application updater defaults to `rockerudon/dqxclarity-multilang`; otherwise
+The application updater defaults to `rockerudon/dqxclarity-plus`; otherwise
 an upstream release could replace the fork. Development builds may override this
 with `DQXCLARITY_UPDATE_REPOSITORY=owner/repository` or updater `--repository`.
+Stable fork tags use `plus-vMAJOR.MINOR.PATCH`; `version.update` remains numeric
+for Python packaging. Explicit legacy `v5.x` tags remain supported by the updater.

@@ -14,7 +14,10 @@ Assert(LanguageNames.DisplayName("zh-Hant") == "Traditional Chinese", "script di
 Assert(LanguageCodes.IsRuntimeTranslationTarget("pt-BR"), "Latin-script target was removed");
 foreach (var unsupported in new[] { "ar", "ja", "ko", "ru", "uk", "zh-Hans", "zh-Hant" })
     Assert(!LanguageCodes.IsRuntimeTranslationTarget(unsupported), $"unsupported target is still selectable: {unsupported}");
-Assert(UpdateService.DefaultRepository == "rockerudon/dqxclarity-multilang", "updater does not target the fork");
+Assert(UpdateService.DefaultRepository == "rockerudon/dqxclarity-plus", "updater does not target Plus");
+Assert(UpdateService.ReleaseVersion("plus-v1.0.0") == "1.0.0", "Plus tag causes an update loop");
+Assert(UpdateService.ReleaseVersion("v5.26.6") == "5.26.6", "legacy version normalization broke");
+Assert(UpdateService.ReleaseVersion("1.0.0") == "1.0.0", "numeric package version changed");
 Assert(GameChatInputService.MaxChars == 40, "DQX chat input limit changed");
 var inputStruct = typeof(GameChatInputService).GetNestedType("INPUT", System.Reflection.BindingFlags.NonPublic)!;
 Assert(System.Runtime.InteropServices.Marshal.SizeOf(inputStruct) == (IntPtr.Size == 8 ? 40 : 28),

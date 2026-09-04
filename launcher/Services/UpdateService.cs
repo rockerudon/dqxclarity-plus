@@ -7,7 +7,7 @@ namespace DqxClarity.Launcher.Services;
 
 public class UpdateService
 {
-    public const string DefaultRepository = "rockerudon/dqxclarity-multilang";
+    public const string DefaultRepository = "rockerudon/dqxclarity-plus";
     private readonly string _repository;
 
     public UpdateService(string? repository = null) =>
@@ -17,6 +17,10 @@ public class UpdateService
 
     private static HttpClient Http() =>
         new() { DefaultRequestHeaders = { { "User-Agent", "dqxclarity-launcher" } } };
+
+    public static string ReleaseVersion(string tag) =>
+        tag.StartsWith("plus-v", StringComparison.Ordinal) ? tag[6..] :
+        tag.StartsWith('v') ? tag[1..] : tag;
 
     private static string ExeDir()
     {
@@ -65,7 +69,7 @@ public class UpdateService
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             var root = doc.RootElement;
             var tag = root.GetProperty("tag_name").GetString() ?? "";
-            var newVer = tag.TrimStart('v');
+            var newVer = ReleaseVersion(tag);
             var body = root.GetProperty("body").GetString() ?? "";
 
             if (string.IsNullOrEmpty(newVer) || newVer == curVer) return null;

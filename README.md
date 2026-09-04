@@ -1,6 +1,6 @@
-# dqxclarity multilingual
+# dqxclarity Plus
 
-A multilingual fork of the original
+A community fork of the original
 [`dqxclarity`](https://github.com/dqx-translation-project/dqxclarity), a
 translation utility for *Dragon Quest X Online*.
 
@@ -11,6 +11,21 @@ languages other than English.
 
 It also adds optional player-chat history translation and a chat input that
 can prepare Japanese messages in the game, with optional automatic translation.
+
+## Fork versions and updates
+
+Plus releases use their own tags, starting with **`plus-v1.0.0`**. They are not
+official dqxclarity releases. `version.update` retains a numeric version (`1.0.0`)
+for Python packaging; the launcher and updater recognize the `plus-v` prefix.
+The locally tracked upstream baseline for this release is **v5.26.1**; the old
+fork releases numbered v5.26.2–v5.26.6 are not upstream version numbers.
+
+The repository is moving from `rockerudon/dqxclarity-multilang` to
+[`rockerudon/dqxclarity-plus`](https://github.com/rockerudon/dqxclarity-plus).
+Existing tags and releases are preserved. The executable, release ZIP asset and
+package directory remain `dqxclarity.exe`, `dqxclarity.zip` and `dqxclarity/` for
+updater compatibility. Do not recreate a repository at the old URL: older
+installations rely on GitHub's redirect during migration.
 
 ## How translation works
 

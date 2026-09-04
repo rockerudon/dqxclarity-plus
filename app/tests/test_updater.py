@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from updater import DEFAULT_UPDATE_REPOSITORY, main
+from updater import DEFAULT_UPDATE_REPOSITORY, fetch_release_info, main, release_version
 
 
 def make_zip(zip_path: str, files: dict) -> None:
@@ -35,8 +35,21 @@ class TestUpdaterMain(unittest.TestCase):
         with open(os.path.join(self.work_dir, "version.update"), "w") as f:
             f.write("1.0.0")
 
-    def test_default_update_repository_is_multilingual_fork(self):
-        self.assertEqual(DEFAULT_UPDATE_REPOSITORY, "rockerudon/dqxclarity-multilang")
+    def test_default_update_repository_is_plus_fork(self):
+        self.assertEqual(DEFAULT_UPDATE_REPOSITORY, "rockerudon/dqxclarity-plus")
+
+    def test_release_version_supports_plus_and_legacy_tags(self):
+        for tag, version in (("plus-v1.0.0", "1.0.0"), ("v5.26.6", "5.26.6"), ("1.0.0", "1.0.0")):
+            self.assertEqual(release_version(tag), version)
+
+    def test_fetch_uses_exact_plus_or_legacy_tag(self):
+        for supplied, expected in (("plus-v1.0.0", "plus-v1.0.0"), ("1.0.0", "plus-v1.0.0"),
+                                   ("v5.26.6", "v5.26.6")):
+            response = MagicMock(status=200)
+            response.read.return_value = b'{}'
+            with patch("updater.urlopen", return_value=response) as fetch:
+                fetch_release_info(supplied)
+            self.assertTrue(fetch.call_args.args[0].full_url.endswith('/releases/tags/' + expected))
 
     def tearDown(self):
         shutil.rmtree(self.work_dir, ignore_errors=True)

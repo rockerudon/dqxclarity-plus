@@ -9,7 +9,7 @@ on:
     branches:
       - main
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'plus-v*'
 
 jobs:
   compile_launcher:
@@ -32,8 +32,11 @@ jobs:
 
       - name: Update GITHUB_ENV env
         run: |
-          echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-8`" >> $GITHUB_ENV
-          echo "CURRENT_TAG=`git describe --always --tags $(git rev-list --tags) | grep -v 'dev' | grep -E '^v' | head -n1 | cut -d"-" -f1`" >> $GITHUB_ENV
+          echo "SHORT_SHA=${GITHUB_SHA:0:8}" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            [[ "$GITHUB_REF_NAME" =~ ^plus-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+            [[ "${GITHUB_REF_NAME#plus-v}" == "$(tr -d '\r\n' < version.update)" ]] || exit 1
+          fi
 
       - name: Build package
         run: |
@@ -43,40 +46,40 @@ jobs:
           cp clarity_dialog.db dqxclarity/misc_files;
 
       - name: Zip package (pre-release)
-        if: startsWith(github.ref, 'refs/tags/v') != true
+        if: github.ref_type != 'tag'
         run: zip -r dqxclarity-dev-$SHORT_SHA.zip dqxclarity
 
       - name: Zip package (release)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref_type == 'tag'
         run: zip -r dqxclarity.zip dqxclarity
 
       - name: Cleanup existing assets from dev release
-        if: startsWith(github.ref, 'refs/tags/v') != true
+        if: github.ref_type != 'tag'
         uses: mknejp/delete-release-assets@v1
         continue-on-error: true  # tag or assets may not exist
         with:
           token: ${{ github.token }}
-          tag: ${{ env.CURRENT_TAG }}-dev
+          tag: plus-dev
           assets: '*.zip'
 
       - name: Create dev release
-        if: startsWith(github.ref, 'refs/tags/v') != true
+        if: github.ref_type != 'tag'
         uses: softprops/action-gh-release@v3
         with:
           files: dqxclarity-dev-${{ env.SHORT_SHA }}.zip
           prerelease: true
-          tag_name: ${{ env.CURRENT_TAG }}-dev
-          name: 'Dev Build: ${{ env.CURRENT_TAG }}-dev'
+          tag_name: plus-dev
+          name: 'dqxclarity Plus development build'
           body: "This is a pre-release build! You don't want to download this!"
 
       - name: Create prod release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           files: dqxclarity.zip
           prerelease: false
           draft: false
           tag_name: ${{ github.ref_name }}
-          name: 'dqxclarity multilingual ${{ github.ref_name }}'
+          name: 'dqxclarity Plus ${{ github.ref_name }}'
           generate_release_notes: true
           fail_on_unmatched_files: true

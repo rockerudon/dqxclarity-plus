@@ -1,4 +1,4 @@
-# dqxclarity Plus
+# dqxclarity plus
 
 A community fork of the original
 [`dqxclarity`](https://github.com/dqx-translation-project/dqxclarity), a
@@ -14,7 +14,7 @@ can prepare Japanese messages in the game, with optional automatic translation.
 
 ## Fork versions and updates
 
-Plus releases use their own tags, starting with **`plus-v1.0.0`**. They are not
+dqxclarity plus releases use their own tags, starting with **`plus-v1.0.0`**. They are not
 official dqxclarity releases. `version.update` retains a numeric version (`1.0.0`)
 for Python packaging; the launcher and updater recognize the `plus-v` prefix.
 The locally tracked upstream baseline for this release is **v5.26.1**; the old

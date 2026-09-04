@@ -69,7 +69,7 @@ jobs:
           files: dqxclarity-dev-${{ env.SHORT_SHA }}.zip
           prerelease: true
           tag_name: plus-dev
-          name: 'dqxclarity Plus development build'
+          name: 'dqxclarity plus development build'
           body: "This is a pre-release build! You don't want to download this!"
 
       - name: Create prod release
@@ -80,6 +80,6 @@ jobs:
           prerelease: false
           draft: false
           tag_name: ${{ github.ref_name }}
-          name: 'dqxclarity Plus ${{ github.ref_name }}'
+          name: 'dqxclarity plus ${{ github.ref_name }}'
           generate_release_notes: true
           fail_on_unmatched_files: true

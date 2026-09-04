@@ -15,6 +15,39 @@ Assert(LanguageCodes.IsRuntimeTranslationTarget("pt-BR"), "Latin-script target w
 foreach (var unsupported in new[] { "ar", "ja", "ko", "ru", "uk", "zh-Hans", "zh-Hant" })
     Assert(!LanguageCodes.IsRuntimeTranslationTarget(unsupported), $"unsupported target is still selectable: {unsupported}");
 Assert(UpdateService.DefaultRepository == "rockerudon/dqxclarity-multilang", "updater does not target the fork");
+Assert(GameChatInputService.MaxChars == 40, "DQX chat input limit changed");
+var inputStruct = typeof(GameChatInputService).GetNestedType("INPUT", System.Reflection.BindingFlags.NonPublic)!;
+Assert(System.Runtime.InteropServices.Marshal.SizeOf(inputStruct) == (IntPtr.Size == 8 ? 40 : 28),
+    "SendInput structure has the wrong Windows ABI size");
+Assert(
+    typeof(ProcessService).Assembly.GetManifestResourceNames().Contains("LocaleHook.dll"),
+    "launcher was built without embedded LocaleHook.dll");
+
+var sharedText2Clipboard = new DqxClarity.Launcher.ViewModels.Text2ClipboardViewModel(null);
+var chatRows = new System.Collections.ObjectModel.ObservableCollection<ChatTranslation>();
+ChatHistory.Apply(chatRows, new() { Id = "first", Translation = "原文", Status = "Waiting for translation" });
+ChatHistory.Apply(chatRows, new() { Id = "second", Translation = "Cached result" });
+ChatHistory.Apply(chatRows, new() { Id = "first", IsUpdate = true, Translation = "Translated first" });
+Assert(chatRows.Count == 2 && chatRows[0].Translation == "Translated first" && chatRows[1].Id == "second",
+    "translation completion reordered the captured chat rows");
+ChatHistory.Apply(chatRows, new() { Id = "first", IsUpdate = true, Sender = "Roma", Recipient = "Ifu" });
+Assert(chatRows.Count == 2 && chatRows[0].Participants == "Roma → Ifu", "recipient update duplicated a row");
+ChatHistory.Apply(chatRows, new() { Id = "third" }, 2);
+ChatHistory.Apply(chatRows, new() { Id = "first", IsUpdate = true }, 2);
+Assert(chatRows.Count == 2 && chatRows[0].Id == "second", "late update resurrected an evicted row");
+chatRows.Clear();
+ChatHistory.Apply(chatRows, new() { Id = "third", IsUpdate = true });
+Assert(chatRows.Count == 0, "late update resurrected a cleared row");
+ChatHistory.Apply(chatRows, new() { Id = "a", Sender = "Roma", Source = "same" });
+ChatHistory.Apply(chatRows, new() { Id = "b", Sender = "Roma", Source = "same" });
+Assert(chatRows.Count == 2, "distinct capture IDs were deduplicated by text");
+Assert(!new ChatTranslation { Source = "pending", Translation = "pending" }.HasOriginal,
+    "pending message displays the same source twice");
+var logViewModel = new DqxClarity.Launcher.ViewModels.LogViewModel(new ProcessService(), sharedText2Clipboard);
+Assert(ReferenceEquals(logViewModel.Text2Clipboard, sharedText2Clipboard), "running Text2Clipboard tab lost its view model");
+logViewModel.OutgoingText = new string('a', 41);
+await logViewModel.SendOutgoingCommand.ExecuteAsync(null);
+Assert(logViewModel.OutgoingStatus.Contains("1–40"), "raw outgoing text bypassed the game limit");
 
 var temp = Path.Combine(Path.GetTempPath(), $"dqxclarity-launcher-test-{Guid.NewGuid():N}");
 Directory.CreateDirectory(temp);
@@ -29,6 +62,10 @@ try
     Assert(loaded.Translation.TargetLanguage == "pt-BR", "launcher did not reload target language");
     Assert(!loaded.Translation.ApiTranslationOverlay, "API translation overlay must be opt-in");
     Assert(!loaded.Translation.GoogleFreeYandexFallback, "Google/Yandex fallback must be opt-in");
+
+    config.Save(new LauncherConfig { ChatHistory = true }, loaded.Translation);
+    loaded = config.Load();
+    Assert(loaded.Launcher.ChatHistory, "launcher did not persist chat history translation");
 
     config.SaveApiTranslationOverlay(true);
     loaded = config.Load();

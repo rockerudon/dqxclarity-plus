@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DqxClarity.Launcher.ViewModels"
+             xmlns:m="using:DqxClarity.Launcher.Models"
              xmlns:v="using:DqxClarity.Launcher.Views"
              x:Class="DqxClarity.Launcher.Views.LogView"
              x:DataType="vm:LogViewModel"
@@ -41,6 +42,7 @@
             <StackPanel Orientation="Horizontal" Spacing="0">
                 <Button x:Name="TabClarity" Classes="tab" Click="OnLogTabClick" Tag="dqxclarity">dqxclarity</Button>
                 <Button x:Name="TabText2Clipboard" Classes="tab" Click="OnLogTabClick" Tag="text2clipboard">Text2Clipboard</Button>
+                <Button x:Name="TabChat" Classes="tab" Click="OnLogTabClick" Tag="chat">Chat</Button>
             </StackPanel>
         </Border>
 
@@ -71,6 +73,101 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
+
+            <Grid x:Name="ChatPanel"
+                  IsVisible="False"
+                  RowDefinitions="*,Auto"
+                  Background="{DynamicResource AppSurface}">
+                <Border Grid.Row="1"
+                        Margin="10,4,10,8"
+                        Padding="7"
+                        Background="{DynamicResource AppSurface2}"
+                        BorderBrush="{DynamicResource AppBorder}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                    <StackPanel Spacing="5">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding OutgoingText}"
+                                     Watermark="Type or paste a message…"
+                                     MaxLength="40"
+                                     IsEnabled="{Binding !IsTranslatingOutgoing}"/>
+                            <TextBlock Grid.Column="1"
+                                       Margin="7,0,0,0"
+                                       Text="{Binding OutgoingCharacterCount}"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppMuted}"/>
+                            <Button Grid.Column="2"
+                                    Margin="7,0,0,0"
+                                    Command="{Binding SendOutgoingCommand}"
+                                    Content="{Binding OutgoingActionLabel}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <CheckBox Grid.Column="0"
+                                      Content="Translate automatically to Japanese"
+                                      IsChecked="{Binding AutoTranslateOutgoing}"
+                                      IsEnabled="{Binding !IsTranslatingOutgoing}"/>
+                            <TextBlock Grid.Column="1"
+                                       Margin="12,0,0,0"
+                                       Text="{Binding OutgoingStatus}"
+                                       FontSize="11"
+                                       TextAlignment="Right"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AppMuted}"
+                                       IsVisible="{Binding HasOutgoingStatus}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer x:Name="ChatMessagesPanel"
+                              Grid.Row="0"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              AllowAutoHide="False">
+                <Panel Margin="10,4,26,8">
+                    <TextBlock Text="Japanese chat translations will appear here when chat history translation is enabled."
+                               FontSize="11"
+                               Foreground="{DynamicResource AppMuted}"
+                               FontStyle="Italic"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding HasNoChatTranslations}"/>
+                    <ItemsControl ItemsSource="{Binding ChatTranslations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="m:ChatTranslation">
+                                <Border Background="{DynamicResource AppSurface2}"
+                                        BorderBrush="{DynamicResource AppBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="8,6"
+                                        Margin="0,0,0,7">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Text="{Binding Participants}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AppAccent}"
+                                                   IsVisible="{Binding !!Sender}"/>
+                                        <SelectableTextBlock Text="{Binding Translation}"
+                                                             FontSize="13"
+                                                             TextWrapping="Wrap"
+                                                             Foreground="{DynamicResource AppText}"/>
+                                        <SelectableTextBlock Text="{Binding Source}"
+                                                             IsVisible="{Binding HasOriginal}"
+                                                             FontSize="11"
+                                                             TextWrapping="Wrap"
+                                                             Foreground="{DynamicResource AppMuted}"/>
+                                        <TextBlock Text="{Binding Status}"
+                                                   IsVisible="{Binding !!Status}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource AppMuted}"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Panel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
 
     </Grid>

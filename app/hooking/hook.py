@@ -58,10 +58,12 @@ class FridaHook:
 class HookScript:
     """Manages a single hook's Frida script."""
 
-    def __init__(self, hook: FridaHook, hook_id: int, session):
+    def __init__(self, hook: FridaHook, hook_id: int, session, template_values: dict[str, str] | None = None):
         self.hook = hook
         self.hook_id = hook_id
         self.session = session
+        self.template_values = {"CHAT_HISTORY_ENABLED": "false", "DEBUG_LOGGING": "false"}
+        self.template_values.update(template_values or {})
         self.script = None
 
     def load(self):
@@ -86,6 +88,8 @@ class HookScript:
         script = script_template.replace("{{HOOK_ID}}", str(self.hook_id))
         script = script.replace("{{HOOK_NAME}}", self.hook.name)
         script = script.replace("{{SIGNATURE}}", self.hook.signature)
+        for key, value in self.template_values.items():
+            script = script.replace(f"{{{{{key}}}}}", value)
 
         return script
 

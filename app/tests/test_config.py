@@ -1,5 +1,6 @@
 import os
 import unittest
+import unittest.mock
 from common.config import UserConfig
 
 
@@ -191,6 +192,26 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.target_language, "pt-BR")
         self.assertEqual(config.target_language_name, "Brazilian Portuguese")
         self.assertTrue(config.active_language.ascii_output)
+
+    def test_process_language_overrides_do_not_modify_saved_config(self) -> None:
+        config = UserConfig(".")
+        config.update(section="translation", key="target_language", value="pt-BR")
+        config.update(section="translation", key="target_language_name", value="Brazilian Portuguese")
+
+        with unittest.mock.patch.dict(
+            os.environ,
+            {
+                "DQXCLARITY_TARGET_LANGUAGE_OVERRIDE": "ja",
+                "DQXCLARITY_SOURCE_LANGUAGE_OVERRIDE": "auto",
+            },
+        ):
+            overridden = UserConfig(".")
+            self.assertEqual(overridden.target_language, "ja")
+            self.assertEqual(overridden.target_language_name, "Japanese")
+            self.assertEqual(overridden.source_language, "auto")
+
+        restored = UserConfig(".")
+        self.assertEqual(restored.target_language, "pt-BR")
 
 
 if __name__ == "__main__":

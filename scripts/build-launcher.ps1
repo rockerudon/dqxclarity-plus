@@ -21,11 +21,17 @@ if (-not $SkipNative) {
         Write-Host "Building native LocaleHook.dll..."
         try {
             & pwsh -ExecutionPolicy Bypass -File $NativeBuild
+            if ($LASTEXITCODE -ne 0) {
+                throw "Native build failed with exit code $LASTEXITCODE"
+            }
         }
         catch {
             Write-Warning "Native build failed. Re-run with -SkipNative for UI-only work, or install CMake + Visual Studio Build Tools C++ workload."
             throw
         }
+    }
+    if (-not (Test-Path (Join-Path $LauncherDir "native\LocaleHook.dll"))) {
+        throw "Native build did not produce LocaleHook.dll; refusing to publish an incomplete launcher."
     }
 }
 else {

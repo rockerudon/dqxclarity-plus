@@ -56,8 +56,33 @@ foreach ($gen in $vsGenerators) {
 }
 
 if (-not $configured) {
+    # Some newer VS installations provide the x86 compiler but are not yet
+    # discovered by CMake. Fall back to the compiler environment directly.
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    $vsPath = if (Test-Path $vswhere) {
+        & $vswhere -latest -products * -property installationPath
+    }
+    $vcvars = if ($vsPath) { Join-Path $vsPath "VC\Auxiliary\Build\vcvars32.bat" }
+    if ($vcvars -and (Test-Path $vcvars)) {
+        Write-Host "CMake could not configure MSVC; compiling with vcvars32 directly."
+        $source = Join-Path $nativeDir "LocaleHook.c"
+        $output = Join-Path $nativeDir "LocaleHook.dll"
+        New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+        $object = Join-Path $buildDir "LocaleHook.obj"
+        $compile = "call `"$vcvars`" >nul && cl /nologo /LD /O2 /MT /Fo:`"$object`" `"$source`" /link /OUT:`"$output`" user32.lib imm32.lib kernel32.lib"
+        & $env:ComSpec /d /s /c $compile
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) {
+            Write-Error "Native compiler fallback failed."
+            exit 1
+        }
+        Write-Host ""
+        Write-Host "Done. Outputs copied to: $nativeDir"
+        Write-Host "  LocaleHook.dll"
+        exit 0
+    }
+
     Write-Error @"
-No supported Visual Studio installation found.
+No supported Visual Studio C compiler found.
 Install VS Build Tools from https://visualstudio.microsoft.com/downloads/
 and select the "Desktop development with C++" workload.
 "@

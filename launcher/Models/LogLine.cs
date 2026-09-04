@@ -12,6 +12,50 @@ public class LogLine
     public IReadOnlyList<AnsiRun> Runs { get; init; } = [];
 }
 
+public class ChatTranslation
+{
+    public string Id { get; init; } = "";
+    public bool IsUpdate { get; init; }
+    public string Sender { get; init; } = "";
+    public string Recipient { get; init; } = "";
+    public string Status { get; init; } = "";
+    public string Source { get; init; } = "";
+    public string Translation { get; init; } = "";
+    public string Category { get; init; } = "";
+    public string Participants => string.IsNullOrEmpty(Recipient) ? Sender : $"{Sender} → {Recipient}";
+    public bool HasOriginal => Source != Translation;
+}
+
+public static class ChatHistory
+{
+    // Capture events reserve their position. Translation completion replaces
+    // that row, so cache hits cannot overtake older pending entries.
+    public static void Apply(IList<ChatTranslation> rows, ChatTranslation chat, int limit = 200)
+    {
+        if (!string.IsNullOrEmpty(chat.Id))
+        {
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].Id != chat.Id) continue;
+                rows[i] = chat;
+                return;
+            }
+        }
+        // A late reply must not resurrect a row removed by Clear or the limit.
+        if (chat.IsUpdate) return;
+        rows.Add(chat);
+        while (rows.Count > limit) rows.RemoveAt(0);
+    }
+}
+
+public class OutgoingChatTranslation
+{
+    public string Id { get; init; } = "";
+    public string Source { get; init; } = "";
+    public string Translation { get; init; } = "";
+    public string Error { get; init; } = "";
+}
+
 public record UpdateInfo(string Version, string Body);
 
 public class DbRow

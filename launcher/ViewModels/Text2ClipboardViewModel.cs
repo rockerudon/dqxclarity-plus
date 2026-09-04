@@ -360,6 +360,15 @@ public partial class Text2ClipboardViewModel : ObservableObject
         SetCopyStatus("Copied to clipboard.", forQuest);
     }
 
+    public async Task<bool> StageForGameInputAsync(string text)
+    {
+        if (_clipboard == null)
+            return false;
+
+        await _clipboard.SetTextAsync(text);
+        return true;
+    }
+
     private void SetCopyStatus(string message, bool forQuest)
     {
         if (forQuest)

@@ -1,6 +1,6 @@
 import configparser
 import os
-from common.language import DEFAULT_ASCII_OUTPUT_LANGUAGES, LanguageContext
+from common.language import DEFAULT_ASCII_OUTPUT_LANGUAGES, LanguageContext, language_display_name
 from common.lib import get_project_root
 
 
@@ -153,11 +153,14 @@ class UserConfig:
     def source_language(self) -> str:
         """Runtime API source language selected by the optional overlay."""
 
+        if override := os.environ.get("DQXCLARITY_SOURCE_LANGUAGE_OVERRIDE", "").strip():
+            return override
         return "auto" if self.api_translation_overlay else "ja"
 
     @property
     def source_language_name(self) -> str:
-        return "the detected source language" if self.api_translation_overlay else "Japanese"
+        source = self.source_language
+        return "the detected source language" if source == "auto" else language_display_name(source)
 
     @property
     def ascii_output_languages(self) -> str:
@@ -165,9 +168,10 @@ class UserConfig:
 
     @property
     def active_language(self) -> LanguageContext:
+        override = os.environ.get("DQXCLARITY_TARGET_LANGUAGE_OVERRIDE", "").strip()
         return LanguageContext.create(
-            self.translation_section.get("target_language", "en"),
-            self.translation_section.get("target_language_name", ""),
+            override or self.translation_section.get("target_language", "en"),
+            "" if override else self.translation_section.get("target_language_name", ""),
             self.ascii_output_languages,
         )
 

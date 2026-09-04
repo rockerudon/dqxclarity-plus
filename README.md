@@ -9,6 +9,9 @@ pack, translation database updates and runtime translation providers. It adds a
 target-language selector, language-isolated caches and safer runtime support for
 languages other than English.
 
+It also adds optional player-chat history translation and a chat input that
+can prepare Japanese messages in the game, with optional automatic translation.
+
 ## How translation works
 
 The two translation layers are independent:
@@ -54,7 +57,13 @@ The base setup remains the same as original dqxclarity:
    Translate Mobile is the free provider and does not require an API key.
 7. For a non-English target, optionally enable **API translation overlay** so
    supported prose from the English pack receives a second translation pass.
-8. Click **Run**, wait until the console says `Done!`, and then enter the game.
+8. Optionally enable **Translate chat history** beside **Nameplates**. Received
+   player messages then appear translated in the launcher's **Chat** tab; player
+   speech bubbles are left untouched. With a fresh in-game chat box open, the
+   input at the bottom writes text directly into DQX, or translates it to Japanese
+   first when its checkbox is enabled. The launcher enforces DQX's 40-character
+   chat-message limit and does not press Enter for you.
+9. Click **Run**, wait until the console says `Done!`, and then enter the game.
 
 Existing users should close both the game and dqxclarity before replacing
 files. Keep a backup of `user_settings.ini` when doing a manual clean install;
@@ -94,6 +103,25 @@ controls, the result is rejected and the pack/source text remains visible.
 - Event/corner text support is implemented and debug-logged, but uncommon
   scenes still benefit from community testing.
 
+### Player chat
+
+Chat translation is opt-in. Captured messages are sent to the selected
+translation provider; names and recognized recipient suffixes are handled
+locally. Debug logs may contain message text, so review them before sharing.
+
+The launcher reserves a row when a message is captured and updates it in place
+when translation finishes. Provider work runs in the background, with at most
+eight requests waiting and one active request. Repeated text shares a translation
+request; queue-full and failed-translation states remain visible in the launcher.
+
+Capture currently depends on the game's history formatter, not a server-message
+notification. Messages never rendered may not be captured, and capture order is
+not guaranteed to be the original conversation order. Render deduplication cannot
+reliably distinguish identical messages from the same sender when the game reuses
+the same buffer. Long translations can be clipped in the game; the launcher shows
+the full translation. Supported kana names are romanized locally, with conservative
+fallback for unrecognized names or layouts. Speech bubbles are not modified.
+
 ## Documentation and development
 
 - [Multilingual architecture](docs/multilingual-architecture.md)
@@ -120,6 +148,6 @@ Additional history and contributors remain available in the Git history.
 
 ## Disclaimer
 
-**Use this software at your own risk. `dqxclarity` alters process memory solely
-to display translated game text. The maintainers accept no responsibility for
+**Use this software at your own risk. `dqxclarity` alters process memory to
+display translated game text and prepare user-authored chat input. The maintainers accept no responsibility for
 warnings, account actions or other consequences resulting from its use.**

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -22,6 +23,77 @@ internal static class LocaleEmulatorService
 
     internal static bool IsAvailable() =>
         File.Exists(Path.Combine(NativeDir(), "LocaleHook.dll"));
+
+    internal static bool EnsureInjectedIntoRunningGame(
+        out int processId,
+        out bool injectedNow,
+        out string error)
+    {
+        processId = 0;
+        injectedNow = false;
+        error = "";
+
+        var processes = Process.GetProcessesByName("DQXGame");
+        if (processes.Length == 0)
+        {
+            error = "DQX is not running.";
+            return false;
+        }
+
+        try
+        {
+            var process = processes.FirstOrDefault(candidate => candidate.MainWindowHandle != IntPtr.Zero)
+                          ?? processes[0];
+            processId = process.Id;
+
+            const uint access = 0x0002 | // PROCESS_CREATE_THREAD
+                                0x0008 | // PROCESS_VM_OPERATION
+                                0x0010 | // PROCESS_VM_READ
+                                0x0020 | // PROCESS_VM_WRITE
+                                0x0400;  // PROCESS_QUERY_INFORMATION
+            var handle = OpenProcess(access, false, processId);
+            if (handle == IntPtr.Zero)
+            {
+                var code = Marshal.GetLastWin32Error();
+                error = code == 5
+                    ? "Access denied. Run dqxclarity with the same administrator level as DQX."
+                    : $"Could not open DQX (Windows error {code}).";
+                return false;
+            }
+
+            try
+            {
+                if (GetModuleBaseInProcess(handle, "LocaleHook.dll") != 0)
+                    return true;
+
+                var dllPath = Path.Combine(NativeDir(), "LocaleHook.dll");
+                if (!File.Exists(dllPath))
+                {
+                    error = "LocaleHook.dll is missing from this launcher build.";
+                    return false;
+                }
+
+                var loadLibrary = GetWow64LoadLibraryW(handle);
+                if (loadLibrary == 0 || !TryInject(handle, dllPath, (IntPtr)(long)loadLibrary))
+                {
+                    error = "Could not enable DQX paste support in the running game.";
+                    return false;
+                }
+
+                injectedNow = true;
+                return true;
+            }
+            finally
+            {
+                CloseHandle(handle);
+            }
+        }
+        finally
+        {
+            foreach (var process in processes)
+                process.Dispose();
+        }
+    }
 
     // Creates the game process and injects LocaleHook.dll before any user input is possible.
     internal static bool Launch(string applicationName, string? arguments, string workingDirectory)
@@ -158,6 +230,9 @@ internal static class LocaleEmulatorService
         bool bInheritHandles, uint dwCreationFlags,
         IntPtr lpEnvironment, string? lpCurrentDirectory,
         ref STARTUPINFOW lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
 
     [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr h);
 

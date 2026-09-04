@@ -5,6 +5,7 @@ namespace DqxClarity.Launcher.Models;
 public class LauncherConfig
 {
     public bool Nameplates { get; set; }
+    public bool ChatHistory { get; set; }
     public bool DebugLogging { get; set; }
     public bool CommunityLogging { get; set; }
     public bool SimultaneousLaunch { get; set; }

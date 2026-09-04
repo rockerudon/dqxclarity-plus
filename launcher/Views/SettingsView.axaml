@@ -140,9 +140,14 @@
                                         <TextBlock Classes="legend" Text="Configuration" Margin="0" VerticalAlignment="Center"/>
                                         <Button Classes="ghost" FontSize="11" Padding="2,0" VerticalAlignment="Center" Click="OnGeneralConfigHelpClick">?</Button>
                                     </StackPanel>
-                                    <CheckBox Content="Nameplates"
-                                              IsChecked="{Binding Nameplates}"
-                                              ToolTip.Tip="Transliterates Japanese nameplates to English."/>
+                                    <StackPanel Orientation="Horizontal" Spacing="16">
+                                        <CheckBox Content="Nameplates"
+                                                  IsChecked="{Binding Nameplates}"
+                                                  ToolTip.Tip="Transliterates Japanese nameplates to English."/>
+                                        <CheckBox Content="Translate chat history"
+                                                  IsChecked="{Binding ChatHistory}"
+                                                  ToolTip.Tip="Translates received player messages in the in-game history and Chat tab. Requires a translation provider."/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 

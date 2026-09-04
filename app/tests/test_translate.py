@@ -29,6 +29,16 @@ class TestTranslate(unittest.TestCase):
             ["Derrote <&dqxc_0000>."],
         )
 
+    def test_outgoing_chat_uses_raw_provider_translation(self):
+        translator = Translator.__new__(Translator)
+        translator.glossary = {"hello": "should not be applied"}
+        translator._Translator__api_translate = MagicMock(return_value=["こんにちは"])
+
+        result = translator.translate_outgoing_chat("  hello there  ")
+
+        self.assertEqual(result, "こんにちは")
+        translator._Translator__api_translate.assert_called_once_with(["hello there"])
+
     def test_selectable_dialogue_controls_are_detected(self):
         self.assertTrue(contains_choice_markup("Choose:<select>\nFirst\nSecond\n<select_end>"))
         self.assertTrue(contains_choice_markup("Choose:<select_se_off>\nFirst\nSecond\n<select_end>"))

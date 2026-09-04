@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using DqxClarity.Launcher.Models;
 
@@ -6,9 +7,15 @@ namespace DqxClarity.Launcher.Services;
 
 public class ProcessService
 {
+    private const string ChatTranslationPrefix = "DQCX_CHAT_TRANSLATION::";
+    private const string OutgoingTranslationPrefix = "DQCX_OUTGOING_TRANSLATION::";
     private Process? _child;
+    private Process? _outgoingTranslator;
+    private string? _pythonPath;
+    private string? _appDir;
     private bool _userStopped;
     private readonly object _lock = new();
+    private readonly SemaphoreSlim _outgoingWriteLock = new(1, 1);
 
     private static readonly Regex AnsiRegex =
         new(@"\x1b\[([0-9;]*)m", RegexOptions.Compiled);
@@ -60,7 +67,28 @@ public class ProcessService
     }
 
     public event Action<LogLine>? LogLine;
+    public event Action<ChatTranslation>? ChatTranslationReceived;
     public event Action<bool>? ProcessExited; // bool = wasError
+
+    private bool TryPublishChatTranslation(string line)
+    {
+        if (!line.StartsWith(ChatTranslationPrefix, StringComparison.Ordinal))
+            return false;
+
+        try
+        {
+            var chat = JsonSerializer.Deserialize<ChatTranslation>(line[ChatTranslationPrefix.Length..]);
+            if (chat != null && (!string.IsNullOrWhiteSpace(chat.Translation)
+                                 || !string.IsNullOrWhiteSpace(chat.Source)))
+                ChatTranslationReceived?.Invoke(chat);
+        }
+        catch (JsonException)
+        {
+            // A malformed internal event should remain visible for diagnosis.
+            return false;
+        }
+        return true;
+    }
 
     private static string ExeDir()
     {
@@ -78,6 +106,115 @@ public class ProcessService
             dir = Path.Combine(dir, "..");
         }
         return Path.GetFullPath(Path.Combine(exeDir, ".."));
+    }
+
+    private Process CreateOutgoingTranslator()
+    {
+        string pythonPath;
+        string appDir;
+        lock (_lock)
+        {
+            if (string.IsNullOrEmpty(_pythonPath) || string.IsNullOrEmpty(_appDir))
+                throw new InvalidOperationException("dqxclarity must be running before chat can be translated.");
+            pythonPath = _pythonPath;
+            appDir = _appDir;
+        }
+
+        var psi = new ProcessStartInfo(pythonPath, "-m chat_translate")
+        {
+            WorkingDirectory = appDir,
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            // Encoding.UTF8 emits a BOM through the redirected StreamWriter.
+            // JSON-lines consumers expect the first byte to be `{`.
+            StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONWARNINGS"] = "ignore::UserWarning";
+        return new Process { StartInfo = psi };
+    }
+
+    public async Task<OutgoingChatTranslation> TranslateOutgoingChatAsync(string text)
+    {
+        var source = (text ?? "").Trim();
+        if (source.Length == 0)
+            return new OutgoingChatTranslation { Error = "Type a message first." };
+
+        var id = Guid.NewGuid().ToString("N");
+        Process? proc = null;
+
+        await _outgoingWriteLock.WaitAsync();
+        try
+        {
+            proc = CreateOutgoingTranslator();
+            lock (_lock)
+                _outgoingTranslator = proc;
+
+            proc.Start();
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            var request = JsonSerializer.Serialize(new { Id = id, Text = source });
+            await proc.StandardInput.WriteLineAsync(request);
+            proc.StandardInput.Close();
+
+            var stdout = await stdoutTask.WaitAsync(TimeSpan.FromSeconds(90));
+            await proc.WaitForExitAsync();
+            await stderrTask;
+
+            foreach (var rawLine in stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Reverse())
+            {
+                var line = rawLine.TrimStart('\uFEFF');
+                if (!line.StartsWith(OutgoingTranslationPrefix, StringComparison.Ordinal))
+                    continue;
+                var response = JsonSerializer.Deserialize<OutgoingChatTranslation>(
+                    line[OutgoingTranslationPrefix.Length..]);
+                if (response != null)
+                    return response;
+            }
+            return new OutgoingChatTranslation { Id = id, Error = "The chat translator returned no response." };
+        }
+        catch (TimeoutException)
+        {
+            try
+            {
+                if (proc is { HasExited: false })
+                    proc.Kill(entireProcessTree: true);
+            }
+            catch { }
+            return new OutgoingChatTranslation { Id = id, Error = "Chat translation timed out." };
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (ReferenceEquals(_outgoingTranslator, proc))
+                    _outgoingTranslator = null;
+            }
+            proc?.Dispose();
+            _outgoingWriteLock.Release();
+        }
+    }
+
+    private void StopOutgoingTranslator()
+    {
+        Process? proc;
+        lock (_lock)
+        {
+            proc = _outgoingTranslator;
+            _outgoingTranslator = null;
+        }
+        try
+        {
+            if (proc is { HasExited: false })
+                proc.Kill(entireProcessTree: true);
+        }
+        catch { }
     }
 
     public void Launch(IEnumerable<string> args)
@@ -110,6 +247,8 @@ public class ProcessService
         {
             if (e.Data != null)
             {
+                if (TryPublishChatTranslation(e.Data))
+                    return;
                 var (text, runs) = ParseAnsi(e.Data);
                 LogLine?.Invoke(new LogLine { Level = "info", Text = text, Runs = runs });
             }
@@ -131,6 +270,7 @@ public class ProcessService
                 wasUser = _userStopped;
                 _userStopped = false;
             }
+            StopOutgoingTranslator();
             if (!wasUser)
             {
                 LogLine?.Invoke(new LogLine { Level = "info", Text = "-- process exited --" });
@@ -142,6 +282,8 @@ public class ProcessService
         lock (_lock)
         {
             _child = proc;
+            _pythonPath = python;
+            _appDir = appDir;
             _userStopped = false;
         }
 
@@ -170,6 +312,8 @@ public class ProcessService
             Process.Start(psi)?.WaitForExit();
         }
         catch { }
+
+        StopOutgoingTranslator();
 
         ProcessExited?.Invoke(false);
     }

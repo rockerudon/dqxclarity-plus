@@ -190,6 +190,7 @@ public class ConfigService
             Launcher = new LauncherConfig
             {
                 Nameplates               = ToBool(l.GetValueOrDefault("nameplates")),
+                ChatHistory              = ToBool(l.GetValueOrDefault("chathistory")),
                 DebugLogging             = ToBool(l.GetValueOrDefault("debuglogging")),
                 CommunityLogging         = ToBool(l.GetValueOrDefault("communitylogging")),
                 SimultaneousLaunch       = ToBool(l.GetValueOrDefault("simultaneouslaunch")),
@@ -272,6 +273,7 @@ public class ConfigService
         sb.AppendLine("[launcher]");
         WriteKv(sb, "communitylogging",         BoolToIni(launcher.CommunityLogging));
         WriteKv(sb, "nameplates",               BoolToIni(launcher.Nameplates));
+        WriteKv(sb, "chathistory",              BoolToIni(launcher.ChatHistory));
         WriteKv(sb, "debuglogging",             BoolToIni(launcher.DebugLogging));
         WriteKv(sb, "simultaneouslaunch",       BoolToIni(launcher.SimultaneousLaunch));
         WriteKv(sb, "directlogin",              BoolToIni(launcher.DirectLogin));

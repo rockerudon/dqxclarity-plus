@@ -30,6 +30,7 @@ public partial class SettingsViewModel : ObservableObject
 
     // ── Launcher settings ────────────────────────────────────────────────────
     [ObservableProperty] private bool _nameplates;
+    [ObservableProperty] private bool _chatHistory;
     [ObservableProperty] private bool _debugLogging;
     [ObservableProperty] private bool _communityLogging;
 
@@ -641,6 +642,7 @@ public partial class SettingsViewModel : ObservableObject
         _updateInfo = updateInfo;
 
         _nameplates        = config.Launcher.Nameplates;
+        _chatHistory       = config.Launcher.ChatHistory;
         _debugLogging      = config.Launcher.DebugLogging;
         _communityLogging  = config.Launcher.CommunityLogging;
         _selectedTheme     = config.Launcher.Theme;
@@ -822,6 +824,7 @@ public partial class SettingsViewModel : ObservableObject
         var launcherCfg = new LauncherConfig
         {
             Nameplates               = Nameplates,
+            ChatHistory              = ChatHistory,
             DebugLogging             = DebugLogging,
             CommunityLogging         = CommunityLogging,
             SimultaneousLaunch       = SimultaneousLaunch,
@@ -952,6 +955,7 @@ public partial class SettingsViewModel : ObservableObject
 
         var args = new List<string>();
         if (Nameplates)       args.Add("--nameplates");
+        if (ChatHistory && !string.IsNullOrEmpty(svc) && svc != "none") args.Add("--chat-history");
         if (DebugLogging)     args.Add("--debug");
         if (CommunityLogging) args.Add("--community-logging");
         if (!string.IsNullOrEmpty(svc) && svc != "none") args.Add("--communication-window");

@@ -105,7 +105,13 @@ def wait_for_memory_threshold(process_name: str, threshold_mb: int = 200):
         count += 1
 
 
-def activate_hooks(communication_window: bool, nameplates: bool, community_logging: bool):
+def activate_hooks(
+    communication_window: bool,
+    nameplates: bool,
+    community_logging: bool,
+    chat_history: bool = False,
+    debug_logging: bool = False,
+):
     global active_scripts
 
     try:
@@ -136,7 +142,15 @@ def activate_hooks(communication_window: bool, nameplates: bool, community_loggi
         log.info("Loading hook scripts...")
         for i, hook in enumerate(enabled_hooks):
             try:
-                hook_script = HookScript(hook, i, session)
+                hook_script = HookScript(
+                    hook,
+                    i,
+                    session,
+                    {
+                        "CHAT_HISTORY_ENABLED": str(chat_history).lower(),
+                        "DEBUG_LOGGING": str(debug_logging).lower(),
+                    },
+                )
                 hook_script.load()
                 active_scripts.append(hook_script)
             except Exception as e:

@@ -283,6 +283,22 @@ class Translator:
             log.error(f"Failed to initialize {self.service} from {module_path}: {e}")
             raise
 
+    def translate_outgoing_chat(self, text: str) -> str | None:
+        """Translate user-authored chat as one raw phrase.
+
+        The helper process selects Japanese as its target. This deliberately
+        bypasses inbound-only Japanese detection, canonical-name protection,
+        dialogue wrapping, and game-tag rewriting.
+        """
+
+        source = (text or "").strip()
+        if not source:
+            return None
+        translated = self.__api_translate([source])
+        if len(translated) != 1 or not translated[0].strip():
+            return None
+        return translated[0].strip()
+
     def translate(self, text: str, wrap_width: int, max_lines=None, add_brs=True, translate_choices=True):
         """Sanitizes different tags and symbols, then translates the string.
 
@@ -471,7 +487,7 @@ class Translator:
         # Update each attribute from its own slice.  The previous implementation
         # used the attribute index as a translation index, so a list following
         # prose consumed the wrong entries and lost its leading newline.
-        for attr_index, attr in enumerate(str_attrs):
+        for attr in str_attrs:
             if not attr["translate"]:
                 continue
             start = attr["translation_start"]

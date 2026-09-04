@@ -28,11 +28,13 @@ public partial class LogView : UserControl
         if (_vm != null)
         {
             _vm.Lines.CollectionChanged -= OnLinesChanged;
+            _vm.ChatTranslations.CollectionChanged -= OnChatTranslationsChanged;
             _vm.PropertyChanged -= OnVmPropertyChanged;
         }
         if (DataContext is not LogViewModel vm) return;
         _vm = vm;
         vm.Lines.CollectionChanged += OnLinesChanged;
+        vm.ChatTranslations.CollectionChanged += OnChatTranslationsChanged;
         vm.PropertyChanged += OnVmPropertyChanged;
         SwitchTab(vm.ActiveLogTab);
     }
@@ -74,13 +76,21 @@ public partial class LogView : UserControl
             _vm.ActiveLogTab = tag;
     }
 
+    private void OnChatTranslationsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action != NotifyCollectionChangedAction.Add) return;
+        Dispatcher.UIThread.Post(() => ChatMessagesPanel.ScrollToEnd(), DispatcherPriority.Background);
+    }
+
     private void SwitchTab(string active)
     {
-        if (LogPanel == null || Text2ClipboardPanel == null) return;
+        if (LogPanel == null || Text2ClipboardPanel == null || ChatPanel == null) return;
         LogPanel.IsVisible = active == "dqxclarity";
         Text2ClipboardPanel.IsVisible = active == "text2clipboard";
+        ChatPanel.IsVisible = active == "chat";
         TabClarity.Classes.Set("tab-active", active == "dqxclarity");
         TabText2Clipboard.Classes.Set("tab-active", active == "text2clipboard");
+        TabChat.Classes.Set("tab-active", active == "chat");
     }
 
     private TextBlock MakeLogBlock(LogLine line)

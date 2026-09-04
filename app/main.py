@@ -27,6 +27,11 @@ def parse_arguments():
         help="Scans for nameplate names and transliterates them to their Romaji counterpart.",
     )
     parser.add_argument(
+        "--chat-history",
+        action="store_true",
+        help="Translates received player messages in the in-game chat history and launcher Chat tab.",
+    )
+    parser.add_argument(
         "-l",
         "--community-logging",
         action="store_true",
@@ -64,6 +69,9 @@ def main():
     if args.communication_window and user_settings.translate_service in ("none", ""):
         log.info("No translation service selected. Skipping communication window hooks.")
         args.communication_window = False
+    if args.chat_history and user_settings.translate_service in ("none", ""):
+        log.info("No translation service selected. Skipping chat history translation.")
+        args.chat_history = False
 
     log.info("Updating custom text in db.")
     download_custom_files()
@@ -93,6 +101,8 @@ def main():
             communication_window=args.communication_window,
             nameplates=args.nameplates,
             community_logging=args.community_logging,
+            chat_history=args.chat_history,
+            debug_logging=args.debug,
         )
 
         log.success("Done! Keep this window open (minimize it) and have fun on your adventure!")

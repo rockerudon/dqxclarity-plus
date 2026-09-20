@@ -48,16 +48,28 @@ automaticamente.
 
 ## Continuidade dos provedores gratuitos
 
-O launcher oferece, apenas para `Google Translate Mobile (free)`, o fallback
-opcional `Use Yandex during Google Free cooldowns`. Ele não faz rotação normal
-de provedores: somente um `HTTP 429` confirmado abre o cooldown e permite que
-as novas falas sejam enviadas ao Yandex. Ao terminar o prazo, a próxima
-tradução tenta o Google novamente. Falhas de parsing, timeout ou resposta
-suspeita não acionam essa troca.
+O `Google Translate (free)` usa o endpoint JSON público da Google, sem chave, e
+alterna entre quatro identificadores de cliente, porque a Google limita cada um
+deles separadamente. Na inicialização o dqxclarity envia uma requisição de
+sondagem para que a primeira fala não pague essa descoberta. O launcher não troca
+de provedor sozinho: somente quando todos os identificadores recusam (`HTTP 429`
+confirmado) ele abre um cooldown limitado de 5, 15 e depois 30 segundos; ao
+terminar o prazo, a próxima tradução tenta o Google novamente. Falhas de parsing,
+timeout ou resposta suspeita não abrem esse prazo.
 
-O fallback é desativado por padrão porque envia ao Yandex o texto recebido
-durante o bloqueio do Google. Resultados válidos continuam usando o cache do
-idioma-alvo; resultados vazios ou suspeitos não são persistidos.
+O texto que chega durante o bloqueio permanece com a tradução do pack e não é
+enviado a outro provedor. O Yandex continua disponível como provedor independente,
+selecionado explicitamente nas configurações.
+
+## Banners de evento e cabeçalhos
+
+`<%sM_header>` e `<%sEV_QUEST_NAME>` chegam do servidor sem entrada de pack no
+primeiro dia de um evento, então são traduzidos na hora e nunca gravados no banco:
+um nome de evento que sobrevivesse ao próprio evento seria pior que o original em
+japonês. O limite é o número de bytes do buffer de origem; quando a tradução só
+cabe truncada, o texto é cortado com `...` e a string é registrada em
+`logs/custom_text.log` com `>>`, para que alguém escreva um nome de pack curto o
+suficiente. Uma linha manual no pack sempre vence a tradução automática.
 
 ## Atualização do pack inglês
 

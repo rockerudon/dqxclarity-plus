@@ -5,10 +5,14 @@ from common.measure import measure_duration
 from loguru import logger as log
 
 
-# uses Google's unofficial translate_a/single endpoint (client=gtx), which requires no API key.
+# uses Google's unofficial translate_a/single endpoint, which requires no API key.
 # this is the "translate-pa" family of free endpoints — more reliable than HTML scraping.
 class GoogleTranslatePa:
     _URL = "https://translate.googleapis.com/translate_a/single"
+    # This adapter has no rotation, so it picks the id with the most room left on
+    # a throttled address rather than the browser widget id ("gtx") that every
+    # scraper shares.
+    _CLIENT = "dict-chrome-ex"
 
     def __init__(self, api_key: str = "") -> None:
         self.session = requests.Session()
@@ -23,7 +27,7 @@ class GoogleTranslatePa:
             for phrase in text:
                 response = self.session.get(
                     self._URL,
-                    params={"client": "gtx", "sl": self.source, "tl": self.target, "dt": "t", "q": phrase},
+                    params={"client": self._CLIENT, "sl": self.source, "tl": self.target, "dt": "t", "q": phrase},
                     timeout=10,
                 )
                 response.raise_for_status()

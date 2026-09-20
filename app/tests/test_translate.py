@@ -1,6 +1,12 @@
 import unittest
 from common.language import contains_choice_markup, is_suspicious_translation, looks_like_choice_list
-from common.translate import Translator, _runtime_translation_policy, should_translate_text, transliterate_player_name
+from common.translate import (
+    Translator,
+    _runtime_translation_policy,
+    prewarm_translation_service,
+    should_translate_text,
+    transliterate_player_name,
+)
 from unittest.mock import MagicMock, patch
 
 
@@ -93,6 +99,26 @@ class TestTranslate(unittest.TestCase):
             )
 
         self.assertEqual(captured, ["This is the place where travelers meet new friends."])
+
+    def test_prewarm_uses_the_provider_instance_the_hooks_share(self):
+        provider = MagicMock()
+        provider.prewarm.return_value = True
+        translator = MagicMock(_get_translator_instance=MagicMock(return_value=provider))
+        with patch("common.translate.Translator", return_value=translator):
+            prewarm_translation_service()
+        provider.prewarm.assert_called_once_with()
+
+    def test_prewarm_skips_providers_without_a_warm_up_route(self):
+        provider = MagicMock(spec=["translate"])
+        translator = MagicMock(_get_translator_instance=MagicMock(return_value=provider))
+        with patch("common.translate.Translator", return_value=translator):
+            prewarm_translation_service()
+        provider.translate.assert_not_called()
+
+    def test_prewarm_never_blocks_startup(self):
+        translator = MagicMock(_get_translator_instance=MagicMock(side_effect=ValueError("unsupported service")))
+        with patch("common.translate.Translator", return_value=translator):
+            prewarm_translation_service()
 
     def test_transliterate_player_name(self):
         name = "セラニー"

@@ -64,6 +64,57 @@ class NetworkTextTests(unittest.TestCase):
         )
         write.assert_not_called()
 
+    def test_event_banner_without_pack_entry_is_translated_live(self) -> None:
+        source = "秋イベント「神の月の感謝祭2」 "
+        translator = MagicMock()
+        translator.translate.return_value = "Autumn Event: Moon Festival 2"
+        with (
+            patch("hooking.hooks.network_text.Translator", return_value=translator),
+            patch("hooking.hooks.network_text._language", LanguageContext.create("en")),
+            patch("hooking.hooks.network_text.sql_write") as write,
+        ):
+            result = network_text.network_text_replacement(source, "<%sEV_QUEST_NAME>")
+
+        self.assertEqual(result, "Autumn Event: Moon Festival 2")
+        self.assertLessEqual(len(result.encode("utf-8")), len(source.encode("utf-8")))
+        translator.translate.assert_called_once_with(source, wrap_width=9999, add_brs=False)
+        write.assert_not_called()
+        network_text._custom_text_logger.info.assert_not_called()
+
+    def test_overlong_event_banner_is_cut_to_the_source_buffer_and_logged(self) -> None:
+        source = "秋イベント「神の月の感謝祭2」 "
+        budget = len(source.encode("utf-8"))
+        translator = MagicMock()
+        translator.translate.return_value = "The Autumn Moon Thanksgiving Festival Edition Two"
+        network_text._m00_text = {}
+        with (
+            patch("hooking.hooks.network_text.Translator", return_value=translator),
+            patch("hooking.hooks.network_text._language", LanguageContext.create("en")),
+        ):
+            result = network_text.network_text_replacement(source, "<%sM_header>")
+
+        self.assertLessEqual(len(result.encode("utf-8")), budget)
+        self.assertTrue(result.startswith("The Autumn Moon"))
+        network_text._custom_text_logger.info.assert_called_once_with(f"--\n>><%sM_header> ::\n{source}")
+
+    def test_pack_entry_still_wins_for_event_banners(self) -> None:
+        source = "第39回 バトルグランプリ・SP"
+        network_text._m00_text = {source: "39th Battle GP SP"}
+        with patch("hooking.hooks.network_text.Translator") as translator_class:
+            self.assertEqual(network_text.network_text_replacement(source, "<%sM_header>"), "39th Battle GP SP")
+        translator_class.assert_not_called()
+
+    def test_failed_banner_translation_keeps_the_original_text_and_logs_it(self) -> None:
+        source = "幻の海トラシュカ2026　"
+        translator = MagicMock()
+        translator.translate.return_value = ""
+        with (
+            patch("hooking.hooks.network_text.Translator", return_value=translator),
+            patch("hooking.hooks.network_text._language", LanguageContext.create("pt-BR")),
+        ):
+            self.assertEqual(network_text.network_text_replacement(source, "<%sM_header>"), source)
+        network_text._custom_text_logger.info.assert_called_once_with(f"--\n>><%sM_header> ::\n{source}")
+
     def test_standalone_speaker_uses_local_romanization_only(self) -> None:
         for name, expected in (("おぴよ", "Opiyo"), ("カリナ", "Karina"), ("ベンジャミン", "Benjamin")):
             with (

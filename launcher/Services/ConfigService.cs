@@ -165,7 +165,6 @@ public class ConfigService
             TargetLanguage = LanguageCodes.Normalize(t.GetValueOrDefault("target_language")),
             TargetLanguageName = t.GetValueOrDefault("target_language_name") ?? "",
             ApiTranslationOverlay = ToBool(t.GetValueOrDefault("api_translation_overlay")),
-            GoogleFreeYandexFallback = ToBool(t.GetValueOrDefault("googlefree_yandex_fallback")),
             AsciiOutputLanguages = t.GetValueOrDefault("ascii_output_languages") ?? "*",
         };
     }
@@ -250,7 +249,6 @@ public class ConfigService
         WriteKv(sb, "target_language",      targetLanguage);
         WriteKv(sb, "target_language_name", targetLanguageName);
         WriteKv(sb, "api_translation_overlay", BoolToIni(translation.ApiTranslationOverlay));
-        WriteKv(sb, "googlefree_yandex_fallback", BoolToIni(translation.GoogleFreeYandexFallback));
         WriteKv(sb, "ascii_output_languages", asciiOutputLanguages);
 
         if (configPairs.Count > 0)
@@ -382,9 +380,6 @@ public class ConfigService
 
     public void SaveApiTranslationOverlay(bool value) =>
         UpdateIniValue(ConfigPath(), "translation", "api_translation_overlay", BoolToIni(value));
-
-    public void SaveGoogleFreeYandexFallback(bool value) =>
-        UpdateIniValue(ConfigPath(), "translation", "googlefree_yandex_fallback", BoolToIni(value));
 
     public void SaveActiveLanguagePacks(IEnumerable<string> fileNames) =>
         UpdateIniValue(

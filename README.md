@@ -88,7 +88,7 @@ For upstream installation and troubleshooting details, see the
 [official dqxclarity documentation](https://dqx-translation-project.github.io/dqxclarity.html)
 and its [troubleshooting guide](https://dqx-translation-project.github.io/troubleshooting.html).
 
-## Providers and fallback
+## Providers
 
 All original providers can target the selected language. The launcher offers
 English, Brazilian and European Portuguese, Spanish, French, German, Italian,
@@ -96,13 +96,23 @@ Dutch, Polish and Turkish. Provider-specific language codes are normalized only
 at their API boundary, while cache entries retain their full language identity
 such as `pt-BR` or `pt-PT`.
 
-When Google Translate Mobile (free) is selected, an additional opt-in setting
-can use Yandex only while Google is rate limited. Google is retried when its
-bounded cooldown ends. This fallback is disabled by default because affected
-text is sent to Yandex.
+The free Google adapter uses Google's keyless JSON endpoint and rotates over four
+public client ids, because Google throttles each id separately. At startup
+dqxclarity sends one probe request so the first dialogue line does not pay for
+that discovery. Only when every id refuses does it apply a bounded cooldown of
+5, 15, then 30 seconds and retry Google afterwards. Text arriving during the
+cooldown keeps its pack translation and is never forwarded to another provider;
+Yandex remains available only as a separately selected provider.
 
 If a provider fails, returns suspicious HTML/CSS, or damages selectable-dialogue
 controls, the result is rejected and the pack/source text remains visible.
+
+Server-delivered banners (`<%sM_header>`, `<%sEV_QUEST_NAME>`) have no pack
+entry on an event's first day, so they are translated live and never written to
+the database - a stale event name would outlive the event. The source buffer is
+the byte limit: a translation that only fits when shortened is truncated, and
+the string is logged with `>>` so a pack author can supply a shorter name. A
+manual pack entry always wins over the live translation.
 
 ## Current limitations
 

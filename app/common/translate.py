@@ -680,6 +680,31 @@ def _runtime_translation_policy() -> tuple[str, bool]:
     return config.target_language, config.api_translation_overlay
 
 
+def prewarm_translation_service() -> None:
+    """Let the provider pick its route before the first hook needs one.
+
+    Providers opt in by exposing ``prewarm``.  Because the instance cache is
+    shared with the hooks, they receive this warmed object instead of building
+    their own.  Startup never depends on the answer, so a failure only costs a
+    log line.
+    """
+
+    try:
+        translator = Translator()._get_translator_instance()
+    except Exception as e:
+        log.warning(f"Skipped the translation pre-warm: {e}")
+        return
+
+    prewarm = getattr(translator, "prewarm", None)
+    if prewarm is None:
+        return
+
+    if prewarm():
+        log.info("Translation provider pre-warmed for the first dialogue line.")
+    else:
+        log.warning("Translation provider pre-warm found no working route; hooks will retry per line.")
+
+
 def should_translate_text(text: str) -> bool:
     """Return whether a hook-visible prose field should use the API layer.
 

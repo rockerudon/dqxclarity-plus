@@ -331,13 +331,16 @@ def sql_read(text: str, table: str, wildcard: bool = False, *, language_code: st
 
 
 _COSMETIC_DIALOGUE_TAGS = frozenset({"attr", "end_attr", "center", "right", "left"})
+_DIALOGUE_TAG_RE = re.compile(r"<[^>]+>")
+_DIALOGUE_TAG_NAME_RE = re.compile(r"<\s*/?\s*([^\s/>]+)")
+_DIALOGUE_QUOTE_RE = re.compile(r"[「」『』]")
 
 
 def _strip_cosmetic_dialogue_tag(match: re.Match[str]) -> str:
     """Drop presentation-only tags while retaining parser control tags."""
 
     tag = match.group(0)
-    name_match = re.match(r"<\s*/?\s*([^\s/>]+)", tag)
+    name_match = _DIALOGUE_TAG_NAME_RE.match(tag)
     if not name_match:
         return tag
     name = name_match.group(1).lower()
@@ -354,10 +357,10 @@ def _dialogue_variant_key(text: str) -> str:
     display a cached line for the wrong dialogue.
     """
 
-    normalized = re.sub(r"<[^>]+>", _strip_cosmetic_dialogue_tag, text or "")
+    normalized = _DIALOGUE_TAG_RE.sub(_strip_cosmetic_dialogue_tag, text or "")
     normalized = unicodedata.normalize("NFKC", normalized)
-    normalized = normalized.translate(str.maketrans({"「": "", "」": "", "『": "", "』": ""}))
-    return re.sub(r"\s+", "", normalized)
+    normalized = _DIALOGUE_QUOTE_RE.sub("", normalized)
+    return "".join(normalized.split())
 
 
 @cache
@@ -395,13 +398,12 @@ def _dialogue_variant_rows(language_code: str) -> dict[str, str]:
                 preferred_by_source.setdefault(source, translated)
 
         for source, translated in preferred_by_source.items():
-            if translated and not is_suspicious_translation(translated):
-                key = _dialogue_variant_key(source)
-                existing = result.get(key)
-                if existing is None:
-                    result[key] = translated
-                elif existing != translated:
-                    ambiguous.add(key)
+            key = _dialogue_variant_key(source)
+            existing = result.get(key)
+            if existing is None:
+                result[key] = translated
+            elif existing != translated:
+                ambiguous.add(key)
         for key in ambiguous:
             result.pop(key, None)
         return result
@@ -435,6 +437,7 @@ def _refresh_machine_cache_version(cursor: sqlite3.Cursor) -> None:
         f"DELETE FROM translation_values WHERE translation_kind = 'machine' AND domain IN ({placeholders})",
         _DYNAMIC_MACHINE_DOMAINS,
     )
+    _dialogue_variant_rows.cache_clear()
     cursor.execute(
         """
         INSERT INTO translation_metadata (key, value)
@@ -544,6 +547,28 @@ def read_dialogue_translation_variant(source_text: str, *, language_code: str | 
     return _dialogue_variant_rows(code).get(_dialogue_variant_key(source_text))
 
 
+def _register_dialogue_variant(language_code: str, source_text: str) -> None:
+    """Fold one freshly written dialogue row into the cached variant index.
+
+    Clearing the whole index instead made the next read re-normalize every
+    cached row on the hook thread, which is where the game is blocked waiting
+    for its dialogue replacement.
+    """
+
+    best = read_translation(source_text, "dialog", language_code=language_code)
+    if not best:
+        return
+    rows = _dialogue_variant_rows(language_code)
+    key = _dialogue_variant_key(source_text)
+    existing = rows.get(key)
+    if existing is not None and existing != best:
+        # A distinct source now shares this key, so the pair is ambiguous and
+        # only a rebuild can apply the collision rule for it.
+        _dialogue_variant_rows.cache_clear()
+        return
+    rows[key] = best
+
+
 def write_translation(
     source_text: str,
     translated_text: str,
@@ -601,8 +626,6 @@ def write_translation(
                     (source_text, translated_text),
                 )
         conn.commit()
-        if domain == "dialog":
-            _dialogue_variant_rows.cache_clear()
     except sqlite3.Error:
         if conn:
             conn.rollback()
@@ -611,6 +634,8 @@ def write_translation(
     finally:
         if conn:
             conn.close()
+    if domain == "dialog":
+        _register_dialogue_variant(code, source_text)
 
 
 def sql_write(

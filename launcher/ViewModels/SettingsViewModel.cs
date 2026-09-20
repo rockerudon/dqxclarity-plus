@@ -207,7 +207,7 @@ public partial class SettingsViewModel : ObservableObject
         new("libretranslate",   "LibreTranslate"),
         new("ollama",           "Ollama"),
         // free (alphabetical)
-        new("googlefree",       "Google Translate Mobile (free)"),
+        new("googlefree",       "Google Translate (free)"),
         new("googletranslatepa","Google Translate API (free)"),
         new("yandex",           "Yandex (free)"),
     ];
@@ -219,7 +219,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private TranslateServiceOption? _selectedTranslateService;
     [ObservableProperty] private TargetLanguageOption? _selectedTargetLanguage;
     [ObservableProperty] private bool _apiTranslationOverlay;
-    [ObservableProperty] private bool _googleFreeYandexFallback;
     [ObservableProperty] private string _translateKey      = "";
     [ObservableProperty] private string _chatGptModel     = "gpt-4o-mini";
     [ObservableProperty] private string _ollamaUrl         = "http://localhost:11434";
@@ -241,9 +240,6 @@ public partial class SettingsViewModel : ObservableObject
     public bool IsFreeService =>
         SelectedTranslateService?.Value is "googlefree" or "googletranslatepa" or "yandex";
 
-    public bool IsGoogleFreeService =>
-        SelectedTranslateService?.Value == "googlefree";
-
     public bool IsNoneService =>
         SelectedTranslateService?.Value == "none";
 
@@ -257,7 +253,6 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowChatGptModel));
         OnPropertyChanged(nameof(ShowLibreTranslateUrl));
         OnPropertyChanged(nameof(IsFreeService));
-        OnPropertyChanged(nameof(IsGoogleFreeService));
         OnPropertyChanged(nameof(IsNoneService));
         OnPropertyChanged(nameof(ShowValidateButton));
         OnPropertyChanged(nameof(CanValidate));
@@ -272,11 +267,6 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnApiTranslationOverlayChanged(bool value)
     {
         try { _cfg.SaveApiTranslationOverlay(value); } catch { }
-    }
-
-    partial void OnGoogleFreeYandexFallbackChanged(bool value)
-    {
-        try { _cfg.SaveGoogleFreeYandexFallback(value); } catch { }
     }
 
     // ── Theme ─────────────────────────────────────────────────────────────
@@ -663,7 +653,6 @@ public partial class SettingsViewModel : ObservableObject
             ?? TargetLanguageOptions.First(o => o.Code == LanguageCodes.Default);
         _selectedTargetLanguage = savedTarget;
         _apiTranslationOverlay = config.Translation.ApiTranslationOverlay;
-        _googleFreeYandexFallback = config.Translation.GoogleFreeYandexFallback;
         _translateKey       = config.Translation.TranslateKey;
         _chatGptModel      = config.Translation.ChatGptModel;
         _ollamaUrl          = config.Translation.OllamaUrl;
@@ -845,7 +834,6 @@ public partial class SettingsViewModel : ObservableObject
             TargetLanguage = SelectedTargetLanguage?.Code ?? LanguageCodes.Default,
             TargetLanguageName = SelectedTargetLanguage?.Display ?? "English",
             ApiTranslationOverlay = ApiTranslationOverlay,
-            GoogleFreeYandexFallback = GoogleFreeYandexFallback,
         };
         try { _cfg.Save(launcherCfg, translation); } catch { }
 

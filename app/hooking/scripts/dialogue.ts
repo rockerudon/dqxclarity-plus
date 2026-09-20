@@ -38,6 +38,12 @@
     const translationCache = new Map();
     const translatedValues = new Set();
 
+    // Untranslated lines are only suppressed for as long as a provider cooldown
+    // can last. Remembering them forever would leave a line that arrived during
+    // a rate limit in Japanese for the rest of the session.
+    const retryDelayMs = 35000;
+    const retryAfter = new Map();
+
     function applyReplacement(args, replacement) {
         // This hook receives a pointer argument. Repointing the argument avoids
         // overwriting an unknown-size pack buffer with a longer translation.
@@ -78,6 +84,14 @@
                     return;
                 }
 
+                const retryAt = retryAfter.get(originalText);
+                if (retryAt !== undefined) {
+                    if (Date.now() < retryAt) {
+                        return;
+                    }
+                    retryAfter.delete(originalText);
+                }
+
                 // cache miss - read string and send to python.
 
                 // try to read NPC name (may be null)
@@ -112,7 +126,7 @@
                         const replacementPtr = applyReplacement(args, replacement);
                         translationCache.set(originalText, {text: replacement, pointer: replacementPtr});
                     } else {
-                        translationCache.set(originalText, null);
+                        retryAfter.set(originalText, Date.now() + retryDelayMs);
                     }
                 }
 

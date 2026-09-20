@@ -64,7 +64,6 @@ try
     var loaded = config.Load();
     Assert(loaded.Translation.TargetLanguage == "pt-BR", "launcher did not reload target language");
     Assert(!loaded.Translation.ApiTranslationOverlay, "API translation overlay must be opt-in");
-    Assert(!loaded.Translation.GoogleFreeYandexFallback, "Google/Yandex fallback must be opt-in");
 
     config.Save(new LauncherConfig { ChatHistory = true }, loaded.Translation);
     loaded = config.Load();
@@ -74,23 +73,17 @@ try
     loaded = config.Load();
     Assert(loaded.Translation.ApiTranslationOverlay, "launcher did not persist the API translation overlay");
 
-    config.SaveGoogleFreeYandexFallback(true);
-    loaded = config.Load();
-    Assert(loaded.Translation.GoogleFreeYandexFallback, "launcher did not persist Google/Yandex fallback");
-
     config.Save(new LauncherConfig(), new TranslationConfig
     {
         TranslateService = "googlefree",
         TargetLanguage = "es",
         TargetLanguageName = "Spanish",
         ApiTranslationOverlay = true,
-        GoogleFreeYandexFallback = true,
     });
     loaded = config.Load();
     Assert(loaded.Translation.TargetLanguage == "es", "settings save ignored the API target dropdown value");
     Assert(loaded.Translation.TargetLanguageName == "Spanish", "settings save ignored the API target display name");
     Assert(loaded.Translation.ApiTranslationOverlay, "settings save dropped the API translation overlay");
-    Assert(loaded.Translation.GoogleFreeYandexFallback, "settings save dropped Google/Yandex fallback");
     ini = File.ReadAllText(Path.Combine(temp, "user_settings.ini"));
     Assert(ini.Contains("ascii_output_languages = *"), "launcher did not persist the safe game character policy");
 

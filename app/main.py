@@ -5,6 +5,7 @@ from common.config import UserConfig
 from common.db_ops import create_db_schema
 from common.lib import get_project_root, is_wine_environment, setup_logging
 from common.process import is_dqx_process_running, start_process, wait_for_dqx_to_launch
+from common.translate import prewarm_translation_service
 from common.update import download_custom_files, import_name_overrides
 from hooking.activate import activate_hooks, cleanup_hooks
 from pathlib import Path
@@ -96,6 +97,9 @@ def main():
                 # any pymem scanning does not currently function on steam deck. these need to be replaced
                 # with a hook. this still works on native windows though.
                 log.warning("Some nameplate features are not available in WINE right now.")
+
+        if args.communication_window or args.chat_history:
+            prewarm_translation_service()
 
         activate_hooks(
             communication_window=args.communication_window,

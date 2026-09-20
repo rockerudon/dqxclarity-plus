@@ -30,10 +30,6 @@ class UserConfig:
             # Opt-in runtime layer applied after language packs. Only text fields
             # exposed by safe hooks are sent to the selected translation API.
             "api_translation_overlay": "False",
-            # Optional continuity fallback for the anonymous Google endpoint.
-            # Only HTTP 429/cooldown traffic is sent to Yandex; Google remains
-            # the selected provider and is retried as soon as the cooldown ends.
-            "googlefree_yandex_fallback": "False",
             "ascii_output_languages": "|".join(DEFAULT_ASCII_OUTPUT_LANGUAGES),
         }
         config["config"] = {"installdirectory": "C:/Program Files (x86)/SquareEnix/DRAGON QUEST X"}
@@ -137,15 +133,6 @@ class UserConfig:
 
         try:
             return self.translation_section.getboolean("api_translation_overlay", fallback=False)
-        except ValueError:
-            return False
-
-    @property
-    def googlefree_yandex_fallback(self) -> bool:
-        """Use Yandex temporarily while Google Free is rate limited."""
-
-        try:
-            return self.translation_section.getboolean("googlefree_yandex_fallback", fallback=False)
         except ValueError:
             return False
 

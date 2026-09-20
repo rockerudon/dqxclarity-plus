@@ -86,6 +86,10 @@ _prose_categories = {
     "<%sM_text01>": ("fixed_dialog_template", "story_so_far"),
 }
 
+# Server-delivered banners that no language pack can cover on an event's first
+# day.  They are translated live instead of staying Japanese.
+_live_label_categories = {"<%sM_header>", "<%sEV_QUEST_NAME>"}
+
 # categories to ignore (known but not translated)
 _to_ignore = {
     "<%sM_Hankaku>",
@@ -486,6 +490,26 @@ def chat_speaker_replacement(original_name: str) -> str:
     return replacement
 
 
+def _translate_ui_label(original_text: str, category: str) -> str:
+    """Machine-translate one server-delivered banner.
+
+    Japanese headers are far more compact than any Latin target, and the writer
+    can only ever use the source buffer, so the result is cut to that size with
+    the project's tag-safe truncation.  Nothing reaches the database: an event
+    name that outlived its event would be worse than the Japanese original.
+    """
+
+    budget = len(original_text.encode("utf-8"))
+    translated = Translator().translate(original_text, wrap_width=9999, add_brs=False)
+    if not translated or len(translated.encode("utf-8")) > budget:
+        # Either way the player still reads Japanese, so record the string for
+        # someone who can write a pack name short enough to fit.
+        _custom_text_logger.info(f"--\n>>{category} ::\n{original_text}")
+    if not translated:
+        return original_text
+    return prepare_game_text(translated, _language, max_bytes=budget)
+
+
 def network_text_replacement(original_text: str, category: str) -> str:
     """Replace network text based on category.
 
@@ -549,12 +573,10 @@ def network_text_replacement(original_text: str, category: str) -> str:
         "<%sM_00>",
         "<%sC_QUEST>",
         "<%sM_02>",
-        "<%sM_header>",
         "<%sM_item>",
         "<%sL_QUEST>",
         "<%sC_ITMR_STITLE>",
         "<%sC_STR2>",
-        "<%sEV_QUEST_NAME>",
     }:
         # generic string
         if replacement := m00_text.get(original_text):
@@ -564,6 +586,9 @@ def network_text_replacement(original_text: str, category: str) -> str:
             log_text = _format_to_json(original_text) if category == "<%sM_00>" else original_text
             _custom_text_logger.info(f"--\n>>{category} ::\n{log_text}")
             return original_text
+
+    elif category in _live_label_categories:
+        return m00_text.get(original_text) or _translate_ui_label(original_text, category)
 
     elif category in _prose_categories:
         # Story summaries and network-delivered story/progress prose use the

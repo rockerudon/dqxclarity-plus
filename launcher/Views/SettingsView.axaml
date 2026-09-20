@@ -196,17 +196,6 @@
                                                Foreground="{DynamicResource AppMuted}"
                                                TextWrapping="Wrap"/>
 
-                                    <CheckBox IsVisible="{Binding IsGoogleFreeService}"
-                                              Content="Use Yandex during Google Free cooldowns"
-                                              IsChecked="{Binding GoogleFreeYandexFallback}"
-                                              ToolTip.Tip="Optional continuity fallback. Only after Google Free returns HTTP 429, affected text is sent to Yandex until Google's cooldown ends. Google is then used again automatically. Disabled by default."/>
-
-                                    <TextBlock IsVisible="{Binding IsGoogleFreeService}"
-                                               Text="Optional: prevents long cutscenes from falling back to pack text during Google rate limits. Text received during the cooldown is sent to Yandex and cached normally."
-                                               FontSize="10"
-                                               Foreground="{DynamicResource AppMuted}"
-                                               TextWrapping="Wrap"/>
-
                                     <!-- None service info -->
                                     <TextBlock IsVisible="{Binding IsNoneService}"
                                                Text="No server-side text translation will be performed."

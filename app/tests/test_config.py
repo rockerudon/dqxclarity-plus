@@ -30,16 +30,6 @@ class TestConfig(unittest.TestCase):
 
         config.update(section="translation", key="api_translation_overlay", value="False")
 
-    def test_googlefree_yandex_fallback_is_opt_in(self) -> None:
-        config = UserConfig(".")
-        self.assertFalse(config.googlefree_yandex_fallback)
-
-        config.update(section="translation", key="googlefree_yandex_fallback", value="True")
-        config = UserConfig(".")
-        self.assertTrue(config.googlefree_yandex_fallback)
-
-        config.update(section="translation", key="googlefree_yandex_fallback", value="False")
-
     def test_update_translate_service(self) -> None:
         config = UserConfig(".")
         config.update(section="translation", key="translate_service", value="deepl")

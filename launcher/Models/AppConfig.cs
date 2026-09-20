@@ -49,7 +49,6 @@ public class TranslationConfig
     public string TargetLanguage { get; set; } = LanguageCodes.Default;
     public string TargetLanguageName { get; set; } = "English";
     public bool ApiTranslationOverlay { get; set; }
-    public bool GoogleFreeYandexFallback { get; set; }
     public string AsciiOutputLanguages { get; set; } = "*";
 }
 

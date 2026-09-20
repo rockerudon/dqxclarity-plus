@@ -58,8 +58,7 @@ terminar o prazo, a próxima tradução tenta o Google novamente. Falhas de pars
 timeout ou resposta suspeita não abrem esse prazo.
 
 O texto que chega durante o bloqueio permanece com a tradução do pack e não é
-enviado a outro provedor. O Yandex continua disponível como provedor independente,
-selecionado explicitamente nas configurações.
+enviado a outro provedor.
 
 ## Banners de evento e cabeçalhos
 

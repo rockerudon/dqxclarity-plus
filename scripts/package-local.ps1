@@ -49,7 +49,10 @@ Get-ChildItem -LiteralPath $PackageDir -Directory -Recurse -Force |
     Where-Object Name -eq "__pycache__" |
     Sort-Object FullName -Descending |
     Remove-Item -Recurse -Force
-Get-ChildItem -LiteralPath $PackageDir -File -Recurse -Force -Include "*.pyc", "*.pyo" |
+# -Include is ignored when Windows PowerShell combines it with -LiteralPath and
+# -Recurse, which used to wipe out the whole package here.
+Get-ChildItem -LiteralPath $PackageDir -File -Recurse -Force |
+    Where-Object Extension -in @(".pyc", ".pyo") |
     Remove-Item -Force
 
 foreach ($file in @("version.update", "pyproject.toml")) {
@@ -86,6 +89,10 @@ if (-not $copiedSourceLanguagePacks -and (Test-Path $BundledLanguagePacksDir)) {
     } | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $PackageLanguagePacksDir -Force
     }
+}
+
+if (-not (Test-Path (Join-Path $PackageDir "main.py"))) {
+    throw "Refusing to zip a package without the Python app."
 }
 
 if (Test-Path $ZipPath) {

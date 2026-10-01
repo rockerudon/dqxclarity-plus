@@ -87,6 +87,11 @@ class GoogleTranslateFree:
         return response is not None and response.status_code == 429
 
     @staticmethod
+    def __is_server_error(exc: requests.RequestException) -> bool:
+        response = getattr(exc, "response", None)
+        return response is not None and 500 <= response.status_code < 600
+
+    @staticmethod
     def __parse_json_response(data: object) -> str:
         try:
             segments = data[0]  # type: ignore[index]
@@ -99,8 +104,9 @@ class GoogleTranslateFree:
 
         Returns the batch alongside whether any id answered with rate
         limiting, so the caller decides whether that deserves a cooldown.
-        Every id sits behind the same host, so a transport failure is not
-        going to heal by trying the next one.
+        Google answers HTTP 5xx per route, so those rotate, but every id sits
+        behind the same host: a transport failure will not heal by trying the
+        next one.
         """
 
         saw_throttle = False
@@ -116,6 +122,9 @@ class GoogleTranslateFree:
                 if self.__is_throttled_error(exc):
                     saw_throttle = True
                     log.debug(f"Google Translate Free client {client!r} is rate limited.")
+                    continue
+                if self.__is_server_error(exc):
+                    log.warning(f"Google Translate Free client {client!r} returned a server error.")
                     continue
                 log.warning(f"Google Translate Free request failed with client {client!r}: {exc}")
                 return [], saw_throttle

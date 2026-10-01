@@ -67,6 +67,12 @@ class TestTranslatorTargets(unittest.TestCase):
         response.raise_for_status.side_effect = requests.HTTPError("429", response=MagicMock(status_code=429))
         return response
 
+    @staticmethod
+    def __server_error_response():
+        response = MagicMock()
+        response.raise_for_status.side_effect = requests.HTTPError("500", response=MagicMock(status_code=500))
+        return response
+
     def test_json_request_uses_mapped_target(self):
         config = MagicMock(target_language="pt-BR", source_language="ja")
         with patch("common.translators.googletranslatefree.UserConfig", return_value=config):
@@ -111,6 +117,45 @@ class TestTranslatorTargets(unittest.TestCase):
             self.assertEqual(translator.translate(["Bye"]), ["Até logo"])
         self.assertEqual(translator.session.get.call_count, 3)
         self.assertEqual(translator.session.get.call_args.kwargs["params"]["client"], working_client)
+
+    def test_server_error_answers_the_same_string_on_the_next_client(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatefree.UserConfig", return_value=config):
+            translator = GoogleTranslateFree()
+        translator.session.get = MagicMock(
+            side_effect=[
+                self.__server_error_response(),
+                self.__json_response("Bem-vindo"),
+            ]
+        )
+
+        with patch("common.translators.googletranslatefree.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome"]), ["Bem-vindo"])
+
+        self.assertEqual(translator.session.get.call_count, 2)
+        self.assertEqual(
+            translator.session.get.call_args_list[0].kwargs["params"]["q"],
+            translator.session.get.call_args_list[1].kwargs["params"]["q"],
+        )
+        self.assertNotEqual(
+            translator.session.get.call_args_list[0].kwargs["params"]["client"],
+            translator.session.get.call_args_list[1].kwargs["params"]["client"],
+        )
+        self.assertEqual(translator._blocked_until, 0.0)
+
+    def test_a_second_server_error_still_reports_the_line_as_untranslated(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatefree.UserConfig", return_value=config):
+            translator = GoogleTranslateFree()
+        translator.session.get = MagicMock(
+            side_effect=[self.__server_error_response() for _ in GoogleTranslateFree._json_clients]
+        )
+
+        with patch("common.translators.googletranslatefree.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome"]), [""])
+        self.assertEqual(translator.session.get.call_count, len(GoogleTranslateFree._json_clients))
+        self.assertEqual(translator._blocked_until, 0.0)
+        self.assertEqual(translator._client_index, 0)
 
     def test_free_google_batches_choice_lines_into_one_request(self):
         config = MagicMock(target_language="pt-BR", source_language="auto")

@@ -59,7 +59,6 @@ class TestLanguage(unittest.TestCase):
             "ar": "مرحبا بالعالم",
             "ru": "Привет, мир!",
             "el": "Καλημέρα κόσμε",
-            "zh-Hans": "你好，世界！",
             "ko": "안녕하세요 세계",
         }
         for language_code, source in samples.items():
@@ -71,6 +70,12 @@ class TestLanguage(unittest.TestCase):
     def test_native_japanese_is_not_romanized(self):
         source = "こんにちは、世界！"
         self.assertEqual(prepare_game_text(source, LanguageContext.create("ja")), source)
+
+    def test_untranslated_japanese_survives_a_latin_target(self):
+        source = "・いにしえの皇子と薬草"
+        for language_code in ("en", "pt-BR"):
+            with self.subTest(language=language_code):
+                self.assertEqual(prepare_game_text(source, LanguageContext.create(language_code)), source)
 
     def test_tags_and_placeholders_survive_output_policy(self):
         source = "<voice_nw><color_red>ação para <pc><select 2>coração"

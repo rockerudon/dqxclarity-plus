@@ -104,7 +104,9 @@ Full Unicode is stored in SQLite. `ascii_output_languages = *` enables the safe
 game boundary for every non-Japanese target. For `pt-BR`, `você`, `ação`,
 `coração`, and `bênção` remain intact in the cache and become `voce`, `acao`,
 `coracao`, and `bencao` only immediately before a hook response. Spanish
-diacritics and punctuation are handled the same way. Non-Latin scripts are
+diacritics and punctuation are handled the same way. Untranslated Japanese inside
+a replacement stays native: the client renders its own script, and romanizing it
+produces Mandarin readings such as `inishienoHuangZi`. Other non-Latin scripts are
 still romanized defensively if a legacy or manually edited
 configuration reaches the runtime, but those targets are not offered by the
 launcher because the result is generally not readable enough for normal use.

@@ -20,6 +20,8 @@ DEFAULT_ASCII_OUTPUT_LANGUAGES = ("*",)
 
 _LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$")
 _GAME_TAG_RE = re.compile(r"(<[^>]+>)")
+# Japanese glyph runs: symbols/punctuation plus kana, kanji, and halfwidth katakana.
+_NATIVE_GLYPH_RUN_RE = re.compile(r"([\u3000-\u30ff\u31f0-\u31ff\u4e00-\u9fff\uff61-\uff9f]+)")
 _CHOICE_MARKUP_RE = re.compile(r"<(?:select(?:_end|_[^>]*|\b)|yesno(?:\b|_)|case(?:_|\s|>))", re.IGNORECASE)
 _CHOICE_CANCEL_TERMS = frozenset(
     {
@@ -231,15 +233,20 @@ def transliterate_game_ascii(text: str) -> str:
     """Romanize visible text into DQX-safe ASCII without modifying game tags.
 
     AnyAscii covers Latin diacritics plus non-Latin scripts such as Arabic,
-    Cyrillic, Greek, Han, and Hangul. It emits printable ASCII and removes an
+    Cyrillic, Greek, and Hangul. It emits printable ASCII and removes an
     unknown character instead of allowing an unsupported glyph into the game.
+    Japanese runs bypass it: the client renders its own script, while AnyAscii
+    romanizes kanji by their Mandarin readings.
     """
 
     from anyascii import anyascii
 
     pieces = _GAME_TAG_RE.split(text)
     for index in range(0, len(pieces), 2):
-        pieces[index] = anyascii(pieces[index])
+        runs = _NATIVE_GLYPH_RUN_RE.split(pieces[index])
+        for run_index in range(0, len(runs), 2):
+            runs[run_index] = anyascii(runs[run_index])
+        pieces[index] = "".join(runs)
     return "".join(pieces)
 
 

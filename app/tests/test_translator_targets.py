@@ -52,7 +52,7 @@ class TestTranslatorTargets(unittest.TestCase):
             patch("common.translators.googletranslatefree.UserConfig", return_value=config),
             patch("common.translators.googletranslatepa.UserConfig", return_value=config),
         ):
-            self.assertEqual(GoogleTranslatePa._CLIENT, GoogleTranslateFree._json_clients[0])
+            self.assertEqual(GoogleTranslatePa._clients[0], GoogleTranslateFree._json_clients[0])
             self.assertNotEqual(GoogleTranslateFree._json_clients[0], "gtx")
 
     @staticmethod
@@ -305,6 +305,90 @@ class TestTranslatorTargets(unittest.TestCase):
 
         with patch("common.translators.googletranslatefree.time.sleep"):
             self.assertFalse(translator.prewarm())
+        translator.session.get.assert_called_once()
+
+    def test_pa_server_error_answers_the_same_phrase_on_the_next_client(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatepa.UserConfig", return_value=config):
+            translator = GoogleTranslatePa()
+        translator.session.get = MagicMock(
+            side_effect=[
+                self.__server_error_response(),
+                self.__json_response("Bem-vindo"),
+            ]
+        )
+
+        with patch("common.translators.googletranslatepa.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome"]), ["Bem-vindo"])
+
+        self.assertEqual(translator.session.get.call_count, 2)
+        self.assertEqual(
+            translator.session.get.call_args_list[0].kwargs["params"]["q"],
+            translator.session.get.call_args_list[1].kwargs["params"]["q"],
+        )
+        self.assertNotEqual(
+            translator.session.get.call_args_list[0].kwargs["params"]["client"],
+            translator.session.get.call_args_list[1].kwargs["params"]["client"],
+        )
+        self.assertEqual(translator._blocked_until, 0.0)
+
+    def test_pa_reports_the_whole_batch_as_untranslated_after_every_client_fails(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatepa.UserConfig", return_value=config):
+            translator = GoogleTranslatePa()
+        translator.session.get = MagicMock(
+            side_effect=[self.__server_error_response() for _ in GoogleTranslatePa._clients]
+        )
+
+        with patch("common.translators.googletranslatepa.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome", "Bye"]), [])
+        self.assertEqual(translator.session.get.call_count, len(GoogleTranslatePa._clients))
+        self.assertEqual(translator._blocked_until, 0.0)
+
+    def test_pa_cools_down_only_after_every_client_is_rate_limited(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatepa.UserConfig", return_value=config):
+            translator = GoogleTranslatePa()
+        translator.session.get = MagicMock(
+            side_effect=[self.__rate_limited_response() for _ in GoogleTranslatePa._clients]
+        )
+
+        with patch("common.translators.googletranslatepa.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome"]), [])
+            self.assertGreater(translator._blocked_until, 0.0)
+            self.assertEqual(translator.translate(["Welcome"]), [])
+        self.assertEqual(translator.session.get.call_count, len(GoogleTranslatePa._clients))
+
+    def test_pa_prewarm_selects_a_client_without_cooling_down(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatepa.UserConfig", return_value=config):
+            translator = GoogleTranslatePa()
+        translator.session.get = MagicMock(
+            side_effect=[self.__rate_limited_response(), self.__json_response("Olá")]
+        )
+
+        with patch("common.translators.googletranslatepa.time.sleep"):
+            self.assertTrue(translator.prewarm())
+        self.assertEqual(translator._client_index, 1)
+        self.assertEqual(translator._blocked_until, 0.0)
+
+        translator.session.get.side_effect = None
+        translator.session.get.return_value = self.__json_response("Bem-vindo")
+        with patch("common.translators.googletranslatepa.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome"]), ["Bem-vindo"])
+        self.assertEqual(
+            translator.session.get.call_args.kwargs["params"]["client"],
+            GoogleTranslatePa._clients[1],
+        )
+
+    def test_pa_stops_after_one_request_when_the_host_is_unreachable(self):
+        config = MagicMock(target_language="pt-BR", source_language="ja")
+        with patch("common.translators.googletranslatepa.UserConfig", return_value=config):
+            translator = GoogleTranslatePa()
+        translator.session.get = MagicMock(side_effect=requests.ConnectionError("no route to host"))
+
+        with patch("common.translators.googletranslatepa.time.sleep"):
+            self.assertEqual(translator.translate(["Welcome"]), [])
         translator.session.get.assert_called_once()
 
 

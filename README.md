@@ -96,7 +96,7 @@ Dutch, Polish and Turkish. Provider-specific language codes are normalized only
 at their API boundary, while cache entries retain their full language identity
 such as `pt-BR` or `pt-PT`.
 
-The free Google adapter uses Google's keyless JSON endpoint and rotates over four
+The free Google adapters use Google's keyless JSON endpoint and rotate over four
 public client ids, because Google throttles each id separately. At startup
 dqxclarity sends one probe request so the first dialogue line does not pay for
 that discovery. Only when every id refuses does it apply a bounded cooldown of
